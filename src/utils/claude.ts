@@ -38,24 +38,22 @@ Rules:
 - Make questions specific to the actual protocol content
 - Return ONLY the JSON object, no markdown, no explanation`;
 
-const AZURE_KEY = import.meta.env.VITE_AZURE_OPENAI_KEY as string;
-const AZURE_ENDPOINT = (import.meta.env.VITE_AZURE_OPENAI_ENDPOINT as string).replace(/\/$/, '');
-const DEPLOYMENT = (import.meta.env.VITE_AZURE_OPENAI_DEPLOYMENT as string) || 'gpt-4o';
-const API_VERSION = '2024-08-01-preview';
+const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
+const OPENAI_MODEL = (import.meta.env.VITE_OPENAI_MODEL as string) || 'gpt-4o';
+
+export const isConfigured = !!OPENAI_KEY;
 
 export async function generateFormFromProtocol(
   protocolText: string
 ): Promise<GeneratedForm> {
-  // Azure OpenAI REST API: POST /openai/deployments/{deployment}/chat/completions?api-version=...
-  const url = `${AZURE_ENDPOINT}/openai/deployments/${DEPLOYMENT}/chat/completions?api-version=${API_VERSION}`;
-
-  const res = await fetch(url, {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'api-key': AZURE_KEY,
+      'Authorization': `Bearer ${OPENAI_KEY}`,
     },
     body: JSON.stringify({
+      model: OPENAI_MODEL,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         {
@@ -65,12 +63,13 @@ export async function generateFormFromProtocol(
       ],
       max_tokens: 4096,
       temperature: 0.3,
+      response_format: { type: 'json_object' },
     }),
   });
 
   if (!res.ok) {
     const errBody = await res.text();
-    throw new Error(`Azure OpenAI error ${res.status}: ${errBody}`);
+    throw new Error(`OpenAI API error ${res.status}: ${errBody}`);
   }
 
   const data = await res.json() as {

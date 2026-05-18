@@ -14,10 +14,7 @@ interface ProcessingState {
   progress: number;
 }
 
-const AZURE_CONFIGURED = !!(
-  import.meta.env.VITE_AZURE_OPENAI_KEY &&
-  import.meta.env.VITE_AZURE_OPENAI_ENDPOINT
-);
+const AZURE_CONFIGURED = !!(import.meta.env.VITE_OPENAI_API_KEY);
 
 export default function App() {
   const [step, setStep] = useState<Step>('upload');
@@ -41,7 +38,7 @@ export default function App() {
         throw new Error('The document appears to be empty or could not be read. Please try a different file.');
       }
 
-      setProcessing({ stage: 'analyzing', message: 'Azure AI is analyzing the protocol...', progress: 55 });
+      setProcessing({ stage: 'analyzing', message: 'OpenAI is analyzing the protocol...', progress: 55 });
       await new Promise(r => setTimeout(r, 400));
 
       const generated = await generateFormFromProtocol(text);
@@ -93,7 +90,7 @@ export default function App() {
           {AZURE_CONFIGURED ? (
             <>
               <CheckCircle2 size={14} color="#16a34a" />
-              <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>Azure AI Connected</span>
+              <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>OpenAI Connected</span>
             </>
           ) : (
             <>
@@ -124,7 +121,7 @@ export default function App() {
                 <span style={{ color: '#2563eb' }}>Smart Data Collection Form</span>
               </h1>
               <p style={{ fontSize: 16, color: '#64748b', maxWidth: 520, margin: '0 auto', lineHeight: 1.65 }}>
-                Upload your research protocol and Azure AI will automatically
+                Upload your research protocol and OpenAI will automatically
                 generate a structured, downloadable form tailored to your specific study.
               </p>
             </div>
@@ -132,7 +129,7 @@ export default function App() {
             {/* Feature pills */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 40, flexWrap: 'wrap' }}>
               {[
-                { icon: <Brain size={14} />, text: 'Azure AI Analysis' },
+                { icon: <Brain size={14} />, text: 'OpenAI Analysis' },
                 { icon: <FileOutput size={14} />, text: 'PDF Export' },
                 { icon: <Sparkles size={14} />, text: 'Smart Questions' },
                 { icon: <Shield size={14} />, text: 'Secure & Private' },
@@ -158,9 +155,9 @@ export default function App() {
               }}>
                 <CheckCircle2 size={16} color="#16a34a" />
                 <div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#15803d' }}>Azure OpenAI Connected</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#15803d' }}>OpenAI Connected</span>
                   <span style={{ fontSize: 13, color: '#16a34a', marginLeft: 8 }}>
-                    calendax-resource · gpt-4o · Ready to generate forms
+                    gpt-4o · Ready to generate forms
                   </span>
                 </div>
               </div>
@@ -203,7 +200,7 @@ export default function App() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
                 {[
                   { step: '01', title: 'Upload Protocol', desc: 'Upload your research protocol as PDF, DOCX, or TXT' },
-                  { step: '02', title: 'AI Analysis', desc: 'Azure AI reads and understands your protocol structure' },
+                  { step: '02', title: 'AI Analysis', desc: 'OpenAI reads and understands your protocol structure' },
                   { step: '03', title: 'Download Form', desc: 'Get a structured form with relevant questions as a PDF' },
                 ].map(item => (
                   <div key={item.step} style={{
