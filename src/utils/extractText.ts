@@ -1,4 +1,6 @@
 // Extract plain text from uploaded files (PDF, DOCX, TXT)
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
+
 export async function extractTextFromFile(file: File): Promise<string> {
   const ext = file.name.split('.').pop()?.toLowerCase();
 
@@ -19,10 +21,7 @@ export async function extractTextFromFile(file: File): Promise<string> {
 
 async function extractFromPDF(file: File): Promise<string> {
   const pdfjsLib = await import('pdfjs-dist');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.mjs',
-    import.meta.url
-  ).toString();
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
