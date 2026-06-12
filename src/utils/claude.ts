@@ -1,6 +1,27 @@
 import type { GeneratedForm } from '../types/form';
 
-const SYSTEM_PROMPT = `You are an expert clinical research form designer. When given a research protocol document, you analyze it deeply and generate a comprehensive, structured data collection form.
+export interface FormOptions {
+  /** Free-text extra instructions appended to the system prompt. */
+  customInstructions?: string;
+  /** Approximate number of questions to generate. */
+  questionCount?: number;
+  /** Approximate number of sections to organize questions into. */
+  sectionCount?: number;
+  /** Who the form is for / what kind of form (e.g. "site coordinator eSource", "patient intake"). */
+  formType?: string;
+  /** Tone/complexity of the language. */
+  detailLevel?: 'concise' | 'standard' | 'detailed';
+}
+
+export const DEFAULT_OPTIONS: Required<Omit<FormOptions, 'customInstructions'>> & { customInstructions: string } = {
+  customInstructions: '',
+  questionCount: 30,
+  sectionCount: 6,
+  formType: 'clinical research eSource data collection form',
+  detailLevel: 'standard',
+};
+
+export const BASE_SYSTEM_PROMPT = `You are an expert clinical research form designer. When given one or more research protocol documents, you analyze them deeply and generate a comprehensive, structured data collection form.
 
 Your output MUST be valid JSON matching this exact structure:
 {
@@ -34,8 +55,8 @@ Rules:
 - Use "number" for numeric values
 - Use "date" for date fields
 - Only include "options" array for select/radio/checkbox types
-- Generate 20-40 relevant questions organized into 4-8 logical sections
 - Make questions specific to the actual protocol content
+- When multiple documents are provided, synthesize them into ONE cohesive form, de-duplicating overlapping fields
 - Return ONLY the JSON object, no markdown, no explanation`;
 
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
@@ -43,9 +64,36 @@ const OPENAI_MODEL = (import.meta.env.VITE_OPENAI_MODEL as string) || 'gpt-4o';
 
 export const isConfigured = !!OPENAI_KEY;
 
+// Build the dynamic portion of the system prompt from user options.
+export function buildSystemPrompt(options: FormOptions = {}): string {
+  const o = { ...DEFAULT_OPTIONS, ...options };
+  const lines: string[] = [BASE_SYSTEM_PROMPT, '', 'Additional requirements for this form:'];
+
+  lines.push(`- This form is a: ${o.formType}`);
+  lines.push(`- Generate approximately ${o.questionCount} relevant questions`);
+  lines.push(`- Organize them into approximately ${o.sectionCount} logical sections`);
+
+  if (o.detailLevel === 'concise') {
+    lines.push('- Keep question wording brief and to the point; minimal help text');
+  } else if (o.detailLevel === 'detailed') {
+    lines.push('- Use thorough, descriptive wording and include helpful helpText for most questions');
+  } else {
+    lines.push('- Use clear, professional wording with helpText where useful');
+  }
+
+  if (o.customInstructions.trim()) {
+    lines.push('', 'User custom instructions (follow these closely):', o.customInstructions.trim());
+  }
+
+  return lines.join('\n');
+}
+
 export async function generateFormFromProtocol(
-  protocolText: string
+  protocolText: string,
+  options: FormOptions = {}
 ): Promise<GeneratedForm> {
+  const systemPrompt = buildSystemPrompt(options);
+
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -55,10 +103,10 @@ export async function generateFormFromProtocol(
     body: JSON.stringify({
       model: OPENAI_MODEL,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `Please analyze this research protocol and generate a comprehensive data collection form:\n\n${protocolText.slice(0, 12000)}`,
+          content: `Please analyze the following research protocol document(s) and generate a comprehensive data collection form:\n\n${protocolText.slice(0, 30000)}`,
         },
       ],
       max_tokens: 4096,

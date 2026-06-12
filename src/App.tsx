@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { Brain, Sparkles, Shield, FileOutput, AlertCircle, Loader, CheckCircle2 } from 'lucide-react';
 import FileUpload from './components/FileUpload';
 import FormPreview from './components/FormPreview';
-import { extractTextFromFile } from './utils/extractText';
+import OptionsPanel from './components/OptionsPanel';
+import { extractTextFromFiles } from './utils/extractText';
 import { generateFormFromProtocol } from './utils/claude';
+import type { FormOptions } from './utils/claude';
 import type { GeneratedForm } from './types/form';
 
 type Step = 'upload' | 'processing' | 'form';
@@ -15,33 +17,46 @@ interface ProcessingState {
 }
 
 const AZURE_CONFIGURED = !!(import.meta.env.VITE_OPENAI_API_KEY);
+const MAX_FILES = 5;
 
 export default function App() {
   const [step, setStep] = useState<Step>('upload');
+  const [files, setFiles] = useState<File[]>([]);
+  const [options, setOptions] = useState<FormOptions>({});
   const [form, setForm] = useState<GeneratedForm | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState<ProcessingState | null>(null);
 
-  const handleFileSelect = async (file: File) => {
+  const handleGenerate = async () => {
     if (!AZURE_CONFIGURED) {
-      setError('Azure OpenAI credentials are not configured. Check your .env file.');
+      setError('OpenAI API key is not configured. Check your .env file.');
+      return;
+    }
+    if (files.length === 0) {
+      setError('Please upload at least one protocol document.');
       return;
     }
     setError(null);
     setStep('processing');
 
     try {
-      setProcessing({ stage: 'extracting', message: 'Reading your protocol document...', progress: 20 });
-      const text = await extractTextFromFile(file);
+      setProcessing({
+        stage: 'extracting',
+        message: files.length > 1
+          ? `Reading ${files.length} protocol documents...`
+          : 'Reading your protocol document...',
+        progress: 20,
+      });
+      const text = await extractTextFromFiles(files);
 
       if (text.trim().length < 100) {
-        throw new Error('The document appears to be empty or could not be read. Please try a different file.');
+        throw new Error('The document(s) appear to be empty or could not be read. Please try different files.');
       }
 
       setProcessing({ stage: 'analyzing', message: 'OpenAI is analyzing the protocol...', progress: 55 });
       await new Promise(r => setTimeout(r, 400));
 
-      const generated = await generateFormFromProtocol(text);
+      const generated = await generateFormFromProtocol(text, options);
 
       setProcessing({ stage: 'building', message: 'Building your form...', progress: 90 });
       await new Promise(r => setTimeout(r, 500));
@@ -55,6 +70,12 @@ export default function App() {
     } finally {
       setProcessing(null);
     }
+  };
+
+  const handleReset = () => {
+    setForm(null);
+    setFiles([]);
+    setStep('upload');
   };
 
   return (
@@ -163,6 +184,9 @@ export default function App() {
               </div>
             )}
 
+            {/* Customization panel */}
+            <OptionsPanel options={options} onChange={setOptions} />
+
             {/* Main card */}
             <div style={{
               background: '#fff', borderRadius: 20,
@@ -171,10 +195,39 @@ export default function App() {
               overflow: 'hidden',
             }}>
               <div style={{ padding: '28px 32px' }}>
-                <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginBottom: 16 }}>
-                  Upload Protocol Document
-                </p>
-                <FileUpload onFileSelect={handleFileSelect} isProcessing={false} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>
+                    Upload Protocol Documents
+                  </p>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                    {files.length}/{MAX_FILES} files
+                  </span>
+                </div>
+                <FileUpload
+                  files={files}
+                  onFilesChange={setFiles}
+                  isProcessing={false}
+                  maxFiles={MAX_FILES}
+                />
+
+                {/* Generate button */}
+                <button
+                  onClick={handleGenerate}
+                  disabled={files.length === 0}
+                  style={{
+                    width: '100%', marginTop: 20,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    padding: '14px', borderRadius: 12, border: 'none',
+                    background: files.length === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                    color: '#fff', fontSize: 15, fontWeight: 700,
+                    cursor: files.length === 0 ? 'not-allowed' : 'pointer',
+                    boxShadow: files.length === 0 ? 'none' : '0 4px 14px rgba(37,99,235,0.35)',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <Sparkles size={17} />
+                  Generate Form{files.length > 1 ? ` from ${files.length} documents` : ''}
+                </button>
               </div>
             </div>
 
@@ -269,7 +322,7 @@ export default function App() {
         )}
 
         {step === 'form' && form && (
-          <FormPreview form={form} onReset={() => { setForm(null); setStep('upload'); }} />
+          <FormPreview form={form} onReset={handleReset} />
         )}
       </main>
 
