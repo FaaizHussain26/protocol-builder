@@ -1,18 +1,21 @@
 import { useRef, useState } from 'react';
 import { Upload, FileText, X, AlertCircle, Plus } from 'lucide-react';
+import { DOC_TYPES, type DocType, fileKey } from '../utils/docTypes';
 
 interface FileUploadProps {
   files: File[];
   onFilesChange: (files: File[]) => void;
   isProcessing: boolean;
   maxFiles?: number;
+  docTypes?: Record<string, DocType>;
+  onDocTypeChange?: (key: string, type: DocType) => void;
 }
 
 const ACCEPTED = '.pdf,.docx,.doc,.txt,.md';
 const MAX_MB = 10;
 const ALLOWED_EXT = ['pdf', 'docx', 'doc', 'txt', 'md'];
 
-export default function FileUpload({ files, onFilesChange, isProcessing, maxFiles = 5 }: FileUploadProps) {
+export default function FileUpload({ files, onFilesChange, isProcessing, maxFiles = 5, docTypes, onDocTypeChange }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +154,22 @@ export default function FileUpload({ files, onFilesChange, isProcessing, maxFile
                     {formatSize(file.size)} · {file.name.split('.').pop()?.toUpperCase()}
                   </p>
                 </div>
+                {docTypes && onDocTypeChange && (
+                  <select
+                    value={docTypes[fileKey(file)] ?? 'Protocol'}
+                    disabled={isProcessing}
+                    onChange={e => onDocTypeChange(fileKey(file), e.target.value as DocType)}
+                    style={{
+                      flexShrink: 0, padding: '6px 10px', borderRadius: 8,
+                      border: '1.5px solid #e2e8f0', background: '#fff',
+                      fontSize: 12, color: '#475569', fontWeight: 600,
+                      cursor: isProcessing ? 'not-allowed' : 'pointer', outline: 'none',
+                    }}
+                    title="Document type"
+                  >
+                    {DOC_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                )}
                 {!isProcessing && (
                   <button
                     onClick={() => removeFile(index)}

@@ -1,80 +1,102 @@
 import { useState } from 'react';
-import { Brain, Sparkles, Shield, FileOutput, AlertCircle, Loader, CheckCircle2 } from 'lucide-react';
+import {
+  Sparkles, Shield, AlertCircle, Loader, CheckCircle2,
+  FileText, Layers, AlertTriangle, FileOutput,
+} from 'lucide-react';
 import FileUpload from './components/FileUpload';
-import FormPreview from './components/FormPreview';
 import OptionsPanel from './components/OptionsPanel';
+import StudyBuilder from './components/StudyBuilder';
 import { extractTextFromFiles } from './utils/extractText';
-import { generateFormFromProtocol } from './utils/claude';
-import type { FormOptions } from './utils/claude';
-import type { GeneratedForm } from './types/form';
+import { buildStudyFromDocuments } from './utils/claude';
+import type { BuildOptions } from './utils/claude';
+import type { StudyModel, IngestedDocument } from './types/study';
+import { detectDocType, fileKey, type DocType } from './utils/docTypes';
+import { DEMO_STUDY } from './utils/demoStudy';
 
-type Step = 'upload' | 'processing' | 'form';
+type Step = 'upload' | 'processing' | 'build';
 
-interface ProcessingState {
-  stage: 'extracting' | 'analyzing' | 'building';
-  message: string;
-  progress: number;
-}
-
-const AZURE_CONFIGURED = !!(import.meta.env.VITE_OPENAI_API_KEY);
+const CONFIGURED = !!import.meta.env.VITE_OPENAI_API_KEY;
 const MAX_FILES = 5;
+const DEMO_MODE = typeof window !== 'undefined' && window.location.hash === '#demo';
 
 export default function App() {
-  const [step, setStep] = useState<Step>('upload');
+  const [step, setStep] = useState<Step>(DEMO_MODE ? 'build' : 'upload');
   const [files, setFiles] = useState<File[]>([]);
-  const [options, setOptions] = useState<FormOptions>({});
-  const [form, setForm] = useState<GeneratedForm | null>(null);
+  const [docTypes, setDocTypes] = useState<Record<string, DocType>>({});
+  const [options, setOptions] = useState<BuildOptions>({});
+  const [study, setStudy] = useState<StudyModel | null>(DEMO_MODE ? DEMO_STUDY : null);
   const [error, setError] = useState<string | null>(null);
-  const [processing, setProcessing] = useState<ProcessingState | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [ingestIndex, setIngestIndex] = useState(0);
+  const [stageMsg, setStageMsg] = useState('');
 
-  const handleGenerate = async () => {
-    if (!AZURE_CONFIGURED) {
-      setError('OpenAI API key is not configured. Check your .env file.');
-      return;
-    }
-    if (files.length === 0) {
-      setError('Please upload at least one protocol document.');
-      return;
-    }
+  const handleFilesChange = (next: File[]) => {
+    setFiles(next);
+    // Auto-detect doc types for newly added files.
+    setDocTypes(prev => {
+      const updated = { ...prev };
+      for (const f of next) {
+        const k = fileKey(f);
+        if (!updated[k]) updated[k] = detectDocType(f.name);
+      }
+      return updated;
+    });
+  };
+
+  const handleBuild = async () => {
+    if (!CONFIGURED) { setError('OpenAI API key is not configured. Check your .env file.'); return; }
+    if (files.length === 0) { setError('Please upload at least one source document.'); return; }
     setError(null);
     setStep('processing');
+    setProgress(8);
 
     try {
-      setProcessing({
-        stage: 'extracting',
-        message: files.length > 1
-          ? `Reading ${files.length} protocol documents...`
-          : 'Reading your protocol document...',
-        progress: 20,
-      });
-      const text = await extractTextFromFiles(files);
+      // Ingestion: walk each document so the user sees them being read.
+      const documents: IngestedDocument[] = [];
+      setStageMsg('Ingesting source documents...');
+      for (let i = 0; i < files.length; i++) {
+        setIngestIndex(i);
+        const f = files[i];
+        documents.push({
+          name: f.name,
+          docType: docTypes[fileKey(f)] ?? detectDocType(f.name),
+          sizeBytes: f.size,
+        });
+        setProgress(8 + Math.round(((i + 1) / files.length) * 32));
+        await new Promise(r => setTimeout(r, 280));
+      }
+      setIngestIndex(files.length);
 
+      setStageMsg('Reading document contents...');
+      const text = await extractTextFromFiles(files);
       if (text.trim().length < 100) {
         throw new Error('The document(s) appear to be empty or could not be read. Please try different files.');
       }
+      setProgress(52);
 
-      setProcessing({ stage: 'analyzing', message: 'OpenAI is analyzing the protocol...', progress: 55 });
+      setStageMsg('AI is building the structured study (visits → forms → fields)...');
+      await new Promise(r => setTimeout(r, 300));
+      const built = await buildStudyFromDocuments(text, documents, options);
+      setProgress(92);
+
+      setStageMsg('Assembling review workspace...');
       await new Promise(r => setTimeout(r, 400));
 
-      const generated = await generateFormFromProtocol(text, options);
-
-      setProcessing({ stage: 'building', message: 'Building your form...', progress: 90 });
-      await new Promise(r => setTimeout(r, 500));
-
-      setForm(generated);
-      setStep('form');
+      setStudy(built);
+      setStep('build');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
-      setError(msg);
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
       setStep('upload');
     } finally {
-      setProcessing(null);
+      setProgress(0);
+      setIngestIndex(0);
     }
   };
 
   const handleReset = () => {
-    setForm(null);
+    setStudy(null);
     setFiles([]);
+    setDocTypes({});
     setStep('upload');
   };
 
@@ -82,151 +104,124 @@ export default function App() {
     <div style={{ minHeight: '100vh', background: '#f1f5f9' }}>
       {/* Top Nav */}
       <nav style={{
-        background: '#fff',
-        borderBottom: '1px solid #e2e8f0',
-        padding: '0 32px',
-        height: 60,
+        background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 32px', height: 60,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        position: 'sticky', top: 0, zIndex: 100,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             width: 34, height: 34, borderRadius: 10,
-            background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+            background: 'linear-gradient(135deg, #0f172a, #f26a1b)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Brain size={18} color="#fff" />
+            <Layers size={18} color="#fff" />
           </div>
           <div>
-            <span style={{ fontWeight: 700, fontSize: 16, color: '#1e293b' }}>ProtoForm</span>
+            <span style={{ fontWeight: 700, fontSize: 16, color: '#1e293b' }}>eSource Builder</span>
             <span style={{
-              marginLeft: 8, fontSize: 11, fontWeight: 600,
-              padding: '2px 8px', borderRadius: 20,
-              background: '#eff6ff', color: '#2563eb',
-            }}>AI</span>
+              marginLeft: 8, fontSize: 11, fontWeight: 600, padding: '2px 8px',
+              borderRadius: 20, background: '#fdf1e8', color: '#f26a1b',
+            }}>Protocol Builder</span>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {AZURE_CONFIGURED ? (
-            <>
-              <CheckCircle2 size={14} color="#16a34a" />
-              <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>OpenAI Connected</span>
-            </>
+          {CONFIGURED ? (
+            <><CheckCircle2 size={14} color="#16a34a" />
+              <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>AI Connected</span></>
           ) : (
-            <>
-              <Shield size={14} color="#64748b" />
-              <span style={{ fontSize: 12, color: '#64748b' }}>Powered by Azure OpenAI</span>
-            </>
+            <><Shield size={14} color="#64748b" />
+              <span style={{ fontSize: 12, color: '#64748b' }}>Powered by OpenAI</span></>
           )}
         </div>
       </nav>
 
-      <main style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px' }}>
+      <main style={{ maxWidth: 1080, margin: '0 auto', padding: '40px 24px' }}>
         {step === 'upload' && (
           <>
             {/* Hero */}
-            <div style={{ textAlign: 'center', marginBottom: 40 }}>
+            <div style={{ textAlign: 'center', marginBottom: 36 }}>
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '6px 14px', borderRadius: 20,
-                background: '#eff6ff', marginBottom: 16,
+                padding: '6px 14px', borderRadius: 20, background: '#fdf1e8', marginBottom: 16,
               }}>
-                <Sparkles size={14} color="#2563eb" />
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#2563eb' }}>
-                  AI-Powered Form Generation
-                </span>
+                <Sparkles size={14} color="#f26a1b" />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#f26a1b' }}>AI-Native eSource Build Pipeline</span>
               </div>
-              <h1 style={{ fontSize: 38, fontWeight: 800, color: '#0f172a', marginBottom: 14, letterSpacing: -1 }}>
-                Turn Any Protocol into a<br />
-                <span style={{ color: '#2563eb' }}>Smart Data Collection Form</span>
+              <h1 style={{ fontSize: 36, fontWeight: 800, color: '#0f172a', marginBottom: 14, letterSpacing: -1 }}>
+                Documents in.<br /><span style={{ color: '#2563eb' }}>An approved structured build out.</span>
               </h1>
-              <p style={{ fontSize: 16, color: '#64748b', maxWidth: 520, margin: '0 auto', lineHeight: 1.65 }}>
-                Upload your research protocol and OpenAI will automatically
-                generate a structured, downloadable form tailored to your specific study.
+              <p style={{ fontSize: 16, color: '#64748b', maxWidth: 600, margin: '0 auto', lineHeight: 1.65 }}>
+                Upload your protocol and supporting source documents. The AI reads across all of them and
+                builds one structured study — visits, forms, and typed fields — that a reviewer can correct and approve.
               </p>
             </div>
 
-            {/* Feature pills */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 40, flexWrap: 'wrap' }}>
+            {/* Pipeline strip */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 32, flexWrap: 'wrap' }}>
               {[
-                { icon: <Brain size={14} />, text: 'OpenAI Analysis' },
-                { icon: <FileOutput size={14} />, text: 'PDF Export' },
-                { icon: <Sparkles size={14} />, text: 'Smart Questions' },
-                { icon: <Shield size={14} />, text: 'Secure & Private' },
-              ].map(({ icon, text }) => (
-                <div key={text} style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '7px 16px', borderRadius: 24,
-                  background: '#fff', border: '1px solid #e2e8f0',
-                  fontSize: 13, fontWeight: 500, color: '#475569',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                }}>
-                  <span style={{ color: '#2563eb' }}>{icon}</span> {text}
+                { icon: <FileText size={14} />, text: 'Ingestion' },
+                { icon: <Layers size={14} />, text: 'Structured Build' },
+                { icon: <CheckCircle2 size={14} />, text: 'Human Review' },
+                { icon: <AlertTriangle size={14} />, text: 'Intelligence' },
+                { icon: <FileOutput size={14} />, text: 'CTMS Export' },
+              ].map(({ icon, text }, i) => (
+                <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 14px', borderRadius: 24, background: '#fff',
+                    border: '1px solid #e2e8f0', fontSize: 13, fontWeight: 500, color: '#475569',
+                  }}>
+                    <span style={{ color: '#2563eb' }}>{icon}</span> {text}
+                  </div>
+                  {i < 4 && <span style={{ color: '#cbd5e1', fontSize: 16 }}>→</span>}
                 </div>
               ))}
             </div>
 
-            {/* Azure status banner */}
-            {AZURE_CONFIGURED && (
+            {CONFIGURED && (
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '12px 20px', borderRadius: 12, marginBottom: 24,
-                background: '#f0fdf4', border: '1px solid #bbf7d0',
+                display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px',
+                borderRadius: 12, marginBottom: 24, background: '#f0fdf4', border: '1px solid #bbf7d0',
               }}>
                 <CheckCircle2 size={16} color="#16a34a" />
-                <div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#15803d' }}>OpenAI Connected</span>
-                  <span style={{ fontSize: 13, color: '#16a34a', marginLeft: 8 }}>
-                    gpt-4o · Ready to generate forms
-                  </span>
-                </div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#15803d' }}>AI Connected</span>
+                <span style={{ fontSize: 13, color: '#16a34a' }}>· Ready to build your structured study</span>
               </div>
             )}
 
-            {/* Customization panel */}
             <OptionsPanel options={options} onChange={setOptions} />
 
-            {/* Main card */}
             <div style={{
-              background: '#fff', borderRadius: 20,
-              border: '1px solid #e2e8f0',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.07)',
-              overflow: 'hidden',
+              background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.07)', overflow: 'hidden',
             }}>
               <div style={{ padding: '28px 32px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>
-                    Upload Protocol Documents
-                  </p>
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>
-                    {files.length}/{MAX_FILES} files
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>Upload Source Documents</p>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>{files.length}/{MAX_FILES} files</span>
                 </div>
+                <p style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 16 }}>
+                  Protocol, schedule of assessments, lab/imaging manuals, eligibility worksheets, sponsor references.
+                </p>
                 <FileUpload
                   files={files}
-                  onFilesChange={setFiles}
+                  onFilesChange={handleFilesChange}
                   isProcessing={false}
                   maxFiles={MAX_FILES}
+                  docTypes={docTypes}
+                  onDocTypeChange={(k, t) => setDocTypes(p => ({ ...p, [k]: t }))}
                 />
 
-                {/* Generate button */}
-                <button
-                  onClick={handleGenerate}
-                  disabled={files.length === 0}
-                  style={{
-                    width: '100%', marginTop: 20,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    padding: '14px', borderRadius: 12, border: 'none',
-                    background: files.length === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                    color: '#fff', fontSize: 15, fontWeight: 700,
-                    cursor: files.length === 0 ? 'not-allowed' : 'pointer',
-                    boxShadow: files.length === 0 ? 'none' : '0 4px 14px rgba(37,99,235,0.35)',
-                    transition: 'all 0.2s',
-                  }}
-                >
+                <button onClick={handleBuild} disabled={files.length === 0} style={{
+                  width: '100%', marginTop: 20, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: 8, padding: '14px', borderRadius: 12, border: 'none',
+                  background: files.length === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                  color: '#fff', fontSize: 15, fontWeight: 700,
+                  cursor: files.length === 0 ? 'not-allowed' : 'pointer',
+                  boxShadow: files.length === 0 ? 'none' : '0 4px 14px rgba(37,99,235,0.35)',
+                }}>
                   <Sparkles size={17} />
-                  Generate Form{files.length > 1 ? ` from ${files.length} documents` : ''}
+                  Build Structured Study{files.length > 1 ? ` from ${files.length} documents` : ''}
                 </button>
               </div>
             </div>
@@ -245,90 +240,71 @@ export default function App() {
               </div>
             )}
 
-            {/* How it works */}
-            <div style={{ marginTop: 48, textAlign: 'center' }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8', letterSpacing: 1, marginBottom: 24, textTransform: 'uppercase' }}>
-                How it works
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-                {[
-                  { step: '01', title: 'Upload Protocol', desc: 'Upload your research protocol as PDF, DOCX, or TXT' },
-                  { step: '02', title: 'AI Analysis', desc: 'OpenAI reads and understands your protocol structure' },
-                  { step: '03', title: 'Download Form', desc: 'Get a structured form with relevant questions as a PDF' },
-                ].map(item => (
-                  <div key={item.step} style={{
-                    background: '#fff', padding: '24px 20px', borderRadius: 16,
-                    border: '1px solid #e2e8f0', textAlign: 'left',
-                  }}>
-                    <span style={{
-                      fontSize: 12, fontWeight: 700, color: '#2563eb',
-                      fontFamily: 'monospace', marginBottom: 10, display: 'block',
-                    }}>{item.step}</span>
-                    <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{item.title}</h3>
-                    <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>{item.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Disclaimer */}
+            <p style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', marginTop: 28, maxWidth: 640, marginInline: 'auto', lineHeight: 1.5 }}>
+              Conceptual reference only. AI generation is real; study data may be representative. Every AI output is a
+              draft a human approves — not certified or submission-ready.
+            </p>
           </>
         )}
 
-        {step === 'processing' && processing && (
+        {step === 'processing' && (
           <div style={{
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            minHeight: 480, textAlign: 'center',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', minHeight: 480, textAlign: 'center',
           }}>
             <div style={{
               width: 80, height: 80, borderRadius: '50%',
               background: 'linear-gradient(135deg, #dbeafe, #eff6ff)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 24,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24,
             }}>
               <Loader size={36} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
             </div>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>Building Your Study</h2>
+            <p style={{ fontSize: 15, color: '#64748b', marginBottom: 28 }}>{stageMsg}</p>
 
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>
-              Generating Your Form
-            </h2>
-            <p style={{ fontSize: 15, color: '#64748b', marginBottom: 32 }}>
-              {processing.message}
-            </p>
+            {/* Ingestion checklist */}
+            <div style={{ width: 380, maxWidth: '100%', marginBottom: 24 }}>
+              {files.map((f, i) => {
+                const done = i < ingestIndex;
+                const active = i === ingestIndex;
+                return (
+                  <div key={fileKey(f)} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                    borderRadius: 9, marginBottom: 6,
+                    background: done ? '#f0fdf4' : active ? '#eff6ff' : '#f8fafc',
+                    border: `1px solid ${done ? '#bbf7d0' : active ? '#bfdbfe' : '#e2e8f0'}`,
+                  }}>
+                    {done
+                      ? <CheckCircle2 size={15} color="#16a34a" />
+                      : active
+                        ? <Loader size={15} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
+                        : <FileText size={15} color="#94a3b8" />}
+                    <span style={{ flex: 1, textAlign: 'left', fontSize: 13, fontWeight: 500, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {f.name}
+                    </span>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>{docTypes[fileKey(f)]}</span>
+                  </div>
+                );
+              })}
+            </div>
 
             <div style={{ width: 320, background: '#e2e8f0', borderRadius: 8, height: 8, marginBottom: 12 }}>
               <div style={{
-                height: '100%', borderRadius: 8,
-                background: 'linear-gradient(90deg, #2563eb, #7c3aed)',
-                width: `${processing.progress}%`,
-                transition: 'width 0.6s ease',
+                height: '100%', borderRadius: 8, background: 'linear-gradient(90deg, #2563eb, #7c3aed)',
+                width: `${progress}%`, transition: 'width 0.5s ease',
               }} />
             </div>
-            <p style={{ fontSize: 13, color: '#94a3b8' }}>{processing.progress}% complete</p>
-
-            <div style={{ display: 'flex', gap: 8, marginTop: 32 }}>
-              {(['extracting', 'analyzing', 'building'] as const).map(s => (
-                <div key={s} style={{
-                  padding: '6px 14px', borderRadius: 20,
-                  background: processing.stage === s ? '#eff6ff' : '#f1f5f9',
-                  color: processing.stage === s ? '#2563eb' : '#94a3b8',
-                  fontSize: 12, fontWeight: 600,
-                  border: `1px solid ${processing.stage === s ? '#bfdbfe' : '#e2e8f0'}`,
-                }}>
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
-                </div>
-              ))}
-            </div>
+            <p style={{ fontSize: 13, color: '#94a3b8' }}>{progress}% complete</p>
           </div>
         )}
 
-        {step === 'form' && form && (
-          <FormPreview form={form} onReset={handleReset} />
+        {step === 'build' && study && (
+          <StudyBuilder study={study} setStudy={setStudy} onReset={handleReset} />
         )}
       </main>
 
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
