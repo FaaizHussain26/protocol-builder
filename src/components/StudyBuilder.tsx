@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
   Check, X, Pencil, ChevronRight, FlaskConical, CircleDot, ListChecks, Plus,
+  PenLine, Upload,
 } from 'lucide-react';
 import type {
   StudyModel, StudyField, StudyVisit, StudyForm, ReviewStatus,
@@ -416,14 +417,23 @@ function FieldCard({ field, onChange, onEdit }: {
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', lineHeight: 1.4 }}>
+          <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: '#1e293b', lineHeight: 1.4 }}>
             {field.label}
             {field.required && <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>}
-          </p>
+          </label>
 
-          <div style={{ display: 'flex', gap: 7, marginTop: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+          {field.completionGuidance && (
+            <p style={{ fontSize: 12, color: '#94a3b8', margin: '3px 0 8px', lineHeight: 1.4 }}>
+              {field.completionGuidance}
+            </p>
+          )}
+
+          <div style={{ marginTop: field.completionGuidance ? 0 : 8 }}>
+            <FieldInput field={field} disabled={field.reviewStatus === 'rejected'} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 7, marginTop: 9, flexWrap: 'wrap', alignItems: 'center' }}>
             <TypeBadge type={field.type} />
-            {field.required && <Pill bg="#fef2f2" color="#dc2626">Required</Pill>}
             <ConfidenceBadge level={field.confidence} compact />
             {field.section && <Pill bg="#f1f5f9" color="#475569">{field.section}</Pill>}
             {flagged && <Pill bg="#fffbeb" color="#b45309"><AlertTriangle size={11} /> Needs review</Pill>}
@@ -442,20 +452,6 @@ function FieldCard({ field, onChange, onEdit }: {
               “{field.originalText}”
             </p>
           )}
-
-          {field.options && field.options.length > 0 && (
-            <div style={{ display: 'flex', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
-              {field.options.map(o => (
-                <span key={o} style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 6, background: '#f1f5f9', color: '#475569' }}>{o}</span>
-              ))}
-            </div>
-          )}
-
-          {field.completionGuidance && (
-            <p style={{ fontSize: 12.5, color: '#64748b', marginTop: 8, fontStyle: 'italic', lineHeight: 1.45 }}>
-              {field.completionGuidance}
-            </p>
-          )}
         </div>
 
         {/* Review controls */}
@@ -469,6 +465,103 @@ function FieldCard({ field, onChange, onEdit }: {
       </div>
     </div>
   );
+}
+
+// Renders the actual data-entry control for a field, matching its type.
+function FieldInput({ field, disabled }: { field: StudyField; disabled: boolean }) {
+  const base: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', borderRadius: 9,
+    border: '1.5px solid #cbd5e1', background: disabled ? '#f8fafc' : '#fff',
+    fontSize: 13.5, color: '#1e293b', outline: 'none',
+    fontFamily: 'inherit', boxSizing: 'border-box',
+  };
+  const choice: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5,
+    color: disabled ? '#94a3b8' : '#334155', cursor: disabled ? 'default' : 'pointer',
+  };
+  const opts = field.options ?? [];
+  const noOpts = <span style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>No options defined.</span>;
+
+  switch (field.type) {
+    case 'textarea':
+      return <textarea rows={2} disabled={disabled} placeholder="Enter response"
+        style={{ ...base, resize: 'vertical', minHeight: 56, lineHeight: 1.5 }} />;
+    case 'number':
+    case 'integer':
+      return <input type="number" step={field.type === 'integer' ? 1 : 'any'} disabled={disabled} placeholder="0" style={base} />;
+    case 'decimal':
+      return <input type="number" step="any" disabled={disabled} placeholder="0.0" style={base} />;
+    case 'date':
+      return <input type="date" disabled={disabled} style={base} />;
+    case 'datetime':
+      return <input type="datetime-local" disabled={disabled} style={base} />;
+    case 'time':
+      return <input type="time" disabled={disabled} style={base} />;
+    case 'select':
+      return (
+        <select disabled={disabled} defaultValue="" style={base}>
+          <option value="" disabled>Select…</option>
+          {opts.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+    case 'multiselect':
+    case 'checkbox':
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {opts.length ? opts.map(o => (
+            <label key={o} style={choice}>
+              <input type="checkbox" disabled={disabled} style={{ accentColor: '#2563eb' }} /> {o}
+            </label>
+          )) : noOpts}
+        </div>
+      );
+    case 'radio':
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {opts.length ? opts.map(o => (
+            <label key={o} style={choice}>
+              <input type="radio" name={field.id} disabled={disabled} style={{ accentColor: '#2563eb' }} /> {o}
+            </label>
+          )) : noOpts}
+        </div>
+      );
+    case 'yesno':
+      return (
+        <div style={{ display: 'flex', gap: 18 }}>
+          {['Yes', 'No'].map(o => (
+            <label key={o} style={choice}>
+              <input type="radio" name={field.id} disabled={disabled} style={{ accentColor: '#2563eb' }} /> {o}
+            </label>
+          ))}
+        </div>
+      );
+    case 'signature':
+      return (
+        <div style={{
+          ...base, borderStyle: 'dashed', height: 56, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', gap: 8,
+          color: '#94a3b8', fontStyle: 'italic', cursor: disabled ? 'default' : 'pointer',
+        }}>
+          <PenLine size={15} /> Sign here
+        </div>
+      );
+    case 'file':
+      return (
+        <div style={{
+          ...base, borderStyle: 'dashed', display: 'flex', alignItems: 'center', gap: 8, color: '#64748b',
+          cursor: disabled ? 'default' : 'pointer',
+        }}>
+          <Upload size={15} /> <span style={{ fontSize: 13 }}>Upload file</span>
+        </div>
+      );
+    case 'calculated':
+      return <input type="text" readOnly disabled
+        placeholder={field.expression ? `= ${field.expression}` : 'Calculated value'}
+        style={{ ...base, background: '#f8fafc', color: '#64748b', fontStyle: 'italic' }} />;
+    case 'text':
+    default:
+      return <input type="text" disabled={disabled} placeholder="Enter response" style={base} />;
+  }
 }
 
 function SmallBtn({ children, onClick, active, activeBg, activeFg }: {
