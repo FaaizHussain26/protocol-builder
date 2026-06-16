@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
-  Check, X, Pencil, ChevronRight, FlaskConical, CircleDot, ListChecks, Save,
+  Check, X, Pencil, ChevronRight, FlaskConical, CircleDot, ListChecks, Plus,
 } from 'lucide-react';
 import type {
   StudyModel, StudyField, StudyVisit, StudyForm, ReviewStatus,
@@ -10,6 +10,29 @@ import { ConfidenceBadge, TypeBadge, Pill } from './ui';
 import EligibilityPanel from './EligibilityPanel';
 import FindingsPanel from './FindingsPanel';
 import ExportPanel from './ExportPanel';
+import FieldEditorDrawer from './FieldEditorDrawer';
+
+// Identifies which field (or new field) the editor drawer is targeting.
+interface EditTarget {
+  formId: string;
+  field: StudyField;
+  isNew: boolean;
+}
+
+let newFieldCounter = 0;
+function blankField(): StudyField {
+  newFieldCounter += 1;
+  return {
+    id: `new-fld-${Date.now()}-${newFieldCounter}`,
+    label: '',
+    type: 'text',
+    required: false,
+    confidence: 'high',
+    completionGuidance: '',
+    source: 'Manually added',
+    reviewStatus: 'accepted',
+  };
+}
 
 interface StudyBuilderProps {
   study: StudyModel;
@@ -22,6 +45,7 @@ type Tab = 'build' | 'eligibility' | 'intelligence' | 'export';
 export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderProps) {
   const [tab, setTab] = useState<Tab>('build');
   const [activeVisitId, setActiveVisitId] = useState(study.visits[0]?.id ?? '');
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
   // ---- Derived counts ----
   const stats = useMemo(() => {
@@ -64,6 +88,32 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
       })),
     });
   };
+
+  // Map over the fields of one form.
+  const mapFormFields = (formId: string, fn: (fields: StudyField[]) => StudyField[]) => {
+    setStudy({
+      ...study,
+      visits: study.visits.map(v => ({
+        ...v,
+        forms: v.forms.map(f => f.id !== formId ? f : { ...f, fields: fn(f.fields) }),
+      })),
+    });
+  };
+
+  // Insert or replace a field (called on drawer save).
+  const saveField = (formId: string, field: StudyField, isNew: boolean) => {
+    if (isNew) mapFormFields(formId, fields => [...fields, field]);
+    else mapFormFields(formId, fields => fields.map(f => (f.id === field.id ? field : f)));
+    setEditTarget(null);
+  };
+
+  const deleteField = (formId: string, fieldId: string) => {
+    mapFormFields(formId, fields => fields.filter(f => f.id !== fieldId));
+    setEditTarget(null);
+  };
+
+  const openEdit = (formId: string, field: StudyField) => setEditTarget({ formId, field, isNew: false });
+  const openAdd = (formId: string) => setEditTarget({ formId, field: blankField(), isNew: true });
 
   const activeVisit = study.visits.find(v => v.id === activeVisitId) ?? study.visits[0];
 
@@ -202,6 +252,8 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
                 visit={activeVisit}
                 onField={mutateField}
                 onRule={setRuleAccepted}
+                onEditField={openEdit}
+                onAddField={openAdd}
               />}
             </div>
           </div>
@@ -219,6 +271,14 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
         )}
         {tab === 'export' && <ExportPanel study={study} stats={stats} />}
       </div>
+
+      <FieldEditorDrawer
+        field={editTarget?.field ?? null}
+        isNew={editTarget?.isNew ?? false}
+        onSave={f => editTarget && saveField(editTarget.formId, f, editTarget.isNew)}
+        onDelete={editTarget && !editTarget.isNew ? () => deleteField(editTarget.formId, editTarget.field.id) : undefined}
+        onClose={() => setEditTarget(null)}
+      />
     </div>
   );
 }
@@ -236,10 +296,12 @@ function CounterChip({ label, value, color }: { label: string; value: number; co
 }
 
 // ---- Visit detail: forms with fields + rules ----
-function VisitDetail({ visit, onField, onRule }: {
+function VisitDetail({ visit, onField, onRule, onEditField, onAddField }: {
   visit: StudyVisit;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
   onRule: (formId: string, ruleId: string, accepted: boolean) => void;
+  onEditField: (formId: string, field: StudyField) => void;
+  onAddField: (formId: string) => void;
 }) {
   return (
     <div>
@@ -253,16 +315,19 @@ function VisitDetail({ visit, onField, onRule }: {
       </div>
 
       {visit.forms.map(form => (
-        <FormBlock key={form.id} form={form} onField={onField} onRule={onRule} />
+        <FormBlock key={form.id} form={form} onField={onField} onRule={onRule}
+          onEditField={onEditField} onAddField={onAddField} />
       ))}
     </div>
   );
 }
 
-function FormBlock({ form, onField, onRule }: {
+function FormBlock({ form, onField, onRule, onEditField, onAddField }: {
   form: StudyForm;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
   onRule: (formId: string, ruleId: string, accepted: boolean) => void;
+  onEditField: (formId: string, field: StudyField) => void;
+  onAddField: (formId: string) => void;
 }) {
   return (
     <div style={{
@@ -281,9 +346,20 @@ function FormBlock({ form, onField, onRule }: {
 
       <div>
         {form.fields.map(field => (
-          <FieldCard key={field.id} field={field} onChange={patch => onField(form.id, field.id, patch)} />
+          <FieldCard key={field.id} field={field}
+            onChange={patch => onField(form.id, field.id, patch)}
+            onEdit={() => onEditField(form.id, field)} />
         ))}
       </div>
+
+      {/* Add field */}
+      <button onClick={() => onAddField(form.id)} style={{
+        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+        padding: '11px', border: 'none', borderTop: '1px dashed #e2e8f0',
+        background: '#fff', color: '#2563eb', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+      }}>
+        <Plus size={15} /> Add field to {form.name}
+      </button>
 
       {form.rules.length > 0 && (
         <div style={{ padding: '14px 18px', background: '#fafbff', borderTop: '1px solid #eef2f7' }}>
@@ -316,11 +392,11 @@ function FormBlock({ form, onField, onRule }: {
   );
 }
 
-function FieldCard({ field, onChange }: { field: StudyField; onChange: (patch: Partial<StudyField>) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [label, setLabel] = useState(field.label);
-  const [guidance, setGuidance] = useState(field.completionGuidance ?? '');
-
+function FieldCard({ field, onChange, onEdit }: {
+  field: StudyField;
+  onChange: (patch: Partial<StudyField>) => void;
+  onEdit: () => void;
+}) {
   const flagged = field.confidence === 'low' && field.reviewStatus === 'pending';
 
   const statusBg: Record<ReviewStatus, string> = {
@@ -328,11 +404,6 @@ function FieldCard({ field, onChange }: { field: StudyField; onChange: (patch: P
   };
   const leftBar: Record<ReviewStatus, string> = {
     pending: flagged ? '#f59e0b' : '#e2e8f0', accepted: '#22c55e', rejected: '#ef4444',
-  };
-
-  const save = () => {
-    onChange({ label, completionGuidance: guidance, reviewStatus: 'accepted' });
-    setEditing(false);
   };
 
   return (
@@ -344,17 +415,10 @@ function FieldCard({ field, onChange }: { field: StudyField; onChange: (patch: P
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {!editing ? (
-            <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', lineHeight: 1.4 }}>
-              {field.label}
-              {field.required && <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>}
-            </p>
-          ) : (
-            <input value={label} onChange={e => setLabel(e.target.value)} style={{
-              width: '100%', padding: '7px 10px', borderRadius: 7,
-              border: '1.5px solid #93c5fd', fontSize: 14, fontWeight: 600, outline: 'none',
-            }} />
-          )}
+          <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', lineHeight: 1.4 }}>
+            {field.label}
+            {field.required && <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>}
+          </p>
 
           <div style={{ display: 'flex', gap: 7, marginTop: 7, flexWrap: 'wrap', alignItems: 'center' }}>
             <TypeBadge type={field.type} />
@@ -364,7 +428,7 @@ function FieldCard({ field, onChange }: { field: StudyField; onChange: (patch: P
             {field.source && <span style={{ fontSize: 11, color: '#94a3b8' }}>· {field.source}</span>}
           </div>
 
-          {field.options && field.options.length > 0 && !editing && (
+          {field.options && field.options.length > 0 && (
             <div style={{ display: 'flex', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
               {field.options.map(o => (
                 <span key={o} style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 6, background: '#f1f5f9', color: '#475569' }}>{o}</span>
@@ -372,36 +436,20 @@ function FieldCard({ field, onChange }: { field: StudyField; onChange: (patch: P
             </div>
           )}
 
-          {!editing ? (
-            field.completionGuidance && (
-              <p style={{ fontSize: 12.5, color: '#64748b', marginTop: 8, fontStyle: 'italic', lineHeight: 1.45 }}>
-                {field.completionGuidance}
-              </p>
-            )
-          ) : (
-            <textarea value={guidance} onChange={e => setGuidance(e.target.value)} rows={2}
-              placeholder="Completion guidance for site staff..."
-              style={{ width: '100%', marginTop: 8, padding: '7px 10px', borderRadius: 7, border: '1.5px solid #e2e8f0', fontSize: 12.5, outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
+          {field.completionGuidance && (
+            <p style={{ fontSize: 12.5, color: '#64748b', marginTop: 8, fontStyle: 'italic', lineHeight: 1.45 }}>
+              {field.completionGuidance}
+            </p>
           )}
         </div>
 
         {/* Review controls */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-          {!editing ? (
-            <>
-              <SmallBtn active={field.reviewStatus === 'accepted'} activeBg="#dcfce7" activeFg="#15803d"
-                onClick={() => onChange({ reviewStatus: 'accepted' })}><Check size={13} /> Accept</SmallBtn>
-              <SmallBtn active={false} onClick={() => { setLabel(field.label); setGuidance(field.completionGuidance ?? ''); setEditing(true); }}>
-                <Pencil size={13} /> Edit</SmallBtn>
-              <SmallBtn active={field.reviewStatus === 'rejected'} activeBg="#fee2e2" activeFg="#b91c1c"
-                onClick={() => onChange({ reviewStatus: 'rejected' })}><X size={13} /> Reject</SmallBtn>
-            </>
-          ) : (
-            <>
-              <SmallBtn active activeBg="#dbeafe" activeFg="#2563eb" onClick={save}><Save size={13} /> Save</SmallBtn>
-              <SmallBtn active={false} onClick={() => setEditing(false)}>Cancel</SmallBtn>
-            </>
-          )}
+          <SmallBtn active={field.reviewStatus === 'accepted'} activeBg="#dcfce7" activeFg="#15803d"
+            onClick={() => onChange({ reviewStatus: 'accepted' })}><Check size={13} /> Accept</SmallBtn>
+          <SmallBtn active={false} onClick={onEdit}><Pencil size={13} /> Edit</SmallBtn>
+          <SmallBtn active={field.reviewStatus === 'rejected'} activeBg="#fee2e2" activeFg="#b91c1c"
+            onClick={() => onChange({ reviewStatus: 'rejected' })}><X size={13} /> Reject</SmallBtn>
         </div>
       </div>
     </div>
