@@ -15,13 +15,20 @@ interface FieldEditorDrawerProps {
 const FIELD_TYPES: { value: FieldType; label: string; desc: string }[] = [
   { value: 'text', label: 'Short text', desc: 'Single-line text' },
   { value: 'textarea', label: 'Long text', desc: 'Multi-line text' },
-  { value: 'number', label: 'Number', desc: 'Numeric value' },
+  { value: 'integer', label: 'Integer', desc: 'Whole number' },
+  { value: 'decimal', label: 'Decimal', desc: 'Number with decimals' },
+  { value: 'number', label: 'Number', desc: 'Generic numeric value' },
   { value: 'date', label: 'Date', desc: 'Calendar date' },
+  { value: 'datetime', label: 'Date & time', desc: 'Date and time' },
   { value: 'time', label: 'Time', desc: 'Time of day' },
   { value: 'yesno', label: 'Yes / No', desc: 'Boolean choice' },
   { value: 'radio', label: 'Single choice', desc: 'Pick one option' },
   { value: 'checkbox', label: 'Multi choice', desc: 'Pick several' },
   { value: 'select', label: 'Dropdown', desc: 'Pick one from a list' },
+  { value: 'multiselect', label: 'Multi-select', desc: 'Pick many from a list' },
+  { value: 'signature', label: 'Signature', desc: 'Sign-off capture' },
+  { value: 'file', label: 'File upload', desc: 'Attach a document' },
+  { value: 'calculated', label: 'Calculated', desc: 'Derived from a formula' },
 ];
 
 const CONFIDENCE_OPTS: { value: Confidence; label: string; color: string }[] = [
@@ -30,7 +37,7 @@ const CONFIDENCE_OPTS: { value: Confidence; label: string; color: string }[] = [
   { value: 'low', label: 'Low (flag for review)', color: '#dc2626' },
 ];
 
-const NEEDS_OPTIONS: FieldType[] = ['radio', 'checkbox', 'select'];
+const NEEDS_OPTIONS: FieldType[] = ['radio', 'checkbox', 'select', 'multiselect'];
 
 export default function FieldEditorDrawer({ field, isNew, onSave, onDelete, onClose }: FieldEditorDrawerProps) {
   const [draft, setDraft] = useState<StudyField | null>(field);
@@ -186,6 +193,34 @@ export default function FieldEditorDrawer({ field, isNew, onSave, onDelete, onCl
             </div>
           )}
 
+          {draft.type === 'signature' && (
+            <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Captures a signature / sign-off (e.g. Informed Consent).</span>
+            </div>
+          )}
+
+          {draft.type === 'file' && (
+            <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Allows the site to attach a document or image.</span>
+            </div>
+          )}
+
+          {draft.type === 'calculated' && (
+            <div style={{ marginBottom: 20 }}>
+              <label style={labelStyle}>Calculation formula</label>
+              <input value={draft.expression ?? ''} onChange={e => set({ expression: e.target.value })}
+                placeholder="e.g. weight / (height/100)^2" style={inputStyle} />
+              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Value is derived automatically from this expression.</p>
+            </div>
+          )}
+
+          {/* Section grouping */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>Section <span style={{ color: '#94a3b8', fontWeight: 500 }}>(optional)</span></label>
+            <input value={draft.section ?? ''} onChange={e => set({ section: e.target.value })}
+              placeholder="e.g. Anthropometry" style={inputStyle} />
+          </div>
+
           {/* Required toggle */}
           <div style={{ marginBottom: 20 }}>
             <label style={labelStyle}>Requirement</label>
@@ -228,11 +263,23 @@ export default function FieldEditorDrawer({ field, isNew, onSave, onDelete, onCl
               style={{ ...inputStyle, resize: 'vertical', minHeight: 72, lineHeight: 1.5 }} />
           </div>
 
-          {/* Source */}
+          {/* Traceability */}
           <div style={{ marginBottom: 4 }}>
-            <label style={labelStyle}>Source</label>
-            <input value={draft.source ?? ''} onChange={e => set({ source: e.target.value })}
-              placeholder="e.g. Protocol §6.1" style={inputStyle} />
+            <label style={labelStyle}>Traceability</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <input value={draft.source ?? ''} onChange={e => set({ source: e.target.value })}
+                placeholder="Source document — e.g. XYZ-123_Protocol_v2.pdf" style={inputStyle} />
+              <div style={{ display: 'flex', gap: 9 }}>
+                <input value={draft.protocolSection ?? ''} onChange={e => set({ protocolSection: e.target.value })}
+                  placeholder="Protocol section — §6.1" style={{ ...inputStyle, flex: 2 }} />
+                <input type="number" value={draft.page ?? ''}
+                  onChange={e => set({ page: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  placeholder="Page" style={{ ...inputStyle, flex: 1 }} />
+              </div>
+              <textarea value={draft.originalText ?? ''} onChange={e => set({ originalText: e.target.value })}
+                rows={2} placeholder="Original text reference — short verbatim snippet from the source"
+                style={{ ...inputStyle, resize: 'vertical', minHeight: 52, lineHeight: 1.5 }} />
+            </div>
           </div>
         </div>
 

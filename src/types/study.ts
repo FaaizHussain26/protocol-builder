@@ -5,12 +5,19 @@ export type FieldType =
   | 'text'
   | 'textarea'
   | 'number'
+  | 'integer'
+  | 'decimal'
   | 'date'
+  | 'datetime'
   | 'time'
   | 'select'
+  | 'multiselect'
   | 'radio'
   | 'checkbox'
-  | 'yesno';
+  | 'yesno'
+  | 'signature'
+  | 'file'
+  | 'calculated';
 
 export type Confidence = 'high' | 'medium' | 'low';
 
@@ -27,8 +34,19 @@ export interface StudyField {
   confidence: Confidence;
   /** Plain instruction for site staff on how to complete the field. */
   completionGuidance?: string;
-  /** Source document(s) this field was derived from. */
+  /** Optional section grouping within the form (e.g. "Anthropometry"). */
+  section?: string;
+  /** Calculation expression for type "calculated" (e.g. "weight / (height/100)^2"). */
+  expression?: string;
+  // ---- Traceability ----
+  /** Source document this field was derived from. */
   source?: string;
+  /** Protocol section reference, e.g. "§6.1". */
+  protocolSection?: string;
+  /** Page number in the source document, if known. */
+  page?: number;
+  /** Short verbatim snippet of the source text this field derives from. */
+  originalText?: string;
   /** Human review decision. */
   reviewStatus: ReviewStatus;
 }
@@ -107,9 +125,11 @@ export interface IngestedDocument {
 export interface StudyModel {
   studyTitle: string;
   studyDescription: string;
+  protocolNumber?: string;
   sponsor?: string;
   phase?: string;
   indication?: string;
+  objectives?: string;
   documents: IngestedDocument[];
   visits: StudyVisit[];
   eligibility: EligibilityCriterion[];

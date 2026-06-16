@@ -143,6 +143,7 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
             <h1 style={{ fontSize: 23, fontWeight: 700, marginBottom: 8, letterSpacing: -0.4 }}>{study.studyTitle}</h1>
             <p style={{ fontSize: 13.5, opacity: 0.8, lineHeight: 1.5, maxWidth: 680 }}>{study.studyDescription}</p>
             <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+              {study.protocolNumber && <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">Protocol {study.protocolNumber}</Pill>}
               {study.phase && <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">{study.phase}</Pill>}
               {study.indication && <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">{study.indication}</Pill>}
               {study.sponsor && <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">{study.sponsor}</Pill>}
@@ -424,9 +425,23 @@ function FieldCard({ field, onChange, onEdit }: {
             <TypeBadge type={field.type} />
             {field.required && <Pill bg="#fef2f2" color="#dc2626">Required</Pill>}
             <ConfidenceBadge level={field.confidence} compact />
+            {field.section && <Pill bg="#f1f5f9" color="#475569">{field.section}</Pill>}
             {flagged && <Pill bg="#fffbeb" color="#b45309"><AlertTriangle size={11} /> Needs review</Pill>}
-            {field.source && <span style={{ fontSize: 11, color: '#94a3b8' }}>· {field.source}</span>}
+            {(field.source || field.protocolSection || field.page != null) && (
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                · {[field.source, field.protocolSection, field.page != null ? `p.${field.page}` : null].filter(Boolean).join(' · ')}
+              </span>
+            )}
           </div>
+
+          {field.originalText && (
+            <p style={{
+              fontSize: 11.5, color: '#94a3b8', marginTop: 6, paddingLeft: 8,
+              borderLeft: '2px solid #e2e8f0', fontStyle: 'italic', lineHeight: 1.45,
+            }}>
+              “{field.originalText}”
+            </p>
+          )}
 
           {field.options && field.options.length > 0 && (
             <div style={{ display: 'flex', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>

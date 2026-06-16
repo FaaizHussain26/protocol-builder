@@ -22,9 +22,12 @@ export function ConfidenceBadge({ level, compact }: { level: Confidence; compact
 }
 
 const TYPE_LABELS: Record<string, string> = {
-  text: 'Text', textarea: 'Long text', number: 'Number', date: 'Date',
-  time: 'Time', select: 'Dropdown', radio: 'Single choice',
+  text: 'Text', textarea: 'Long text', number: 'Number',
+  integer: 'Integer', decimal: 'Decimal', date: 'Date',
+  datetime: 'Date & time', time: 'Time', select: 'Dropdown',
+  multiselect: 'Multi-select', radio: 'Single choice',
   checkbox: 'Multi choice', yesno: 'Yes / No',
+  signature: 'Signature', file: 'File upload', calculated: 'Calculated',
 };
 
 export function TypeBadge({ type }: { type: string }) {

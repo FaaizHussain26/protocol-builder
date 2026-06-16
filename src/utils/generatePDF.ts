@@ -109,6 +109,7 @@ export function generateBuildSpecPDF(study: StudyModel, stats: DocStats): void {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   const meta = [
+    study.protocolNumber && `Protocol: ${study.protocolNumber}`,
     study.phase && `Phase: ${study.phase}`,
     study.indication && `Indication: ${study.indication}`,
     study.sponsor && `Sponsor: ${study.sponsor}`,
