@@ -21,7 +21,7 @@ export const DEFAULT_OPTIONS: Required<Omit<BuildOptions, 'customInstructions'>>
 };
 
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
-const OPENAI_MODEL = (import.meta.env.VITE_OPENAI_MODEL as string) || 'gpt-4.1';
+const OPENAI_MODEL = (import.meta.env.VITE_OPENAI_MODEL as string) || 'gpt-5.5';
 
 export const isConfigured = !!OPENAI_KEY;
 
