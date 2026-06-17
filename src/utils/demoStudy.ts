@@ -56,7 +56,7 @@ export const DEMO_STUDY: StudyModel = {
       ],
     },
     {
-      id: 'v3', name: 'Week 12 / End of Treatment', kind: 'visit', timing: 'Week 12', window: '±5 days',
+      id: 'v3', name: 'End of Treatment', kind: 'visit', timing: 'Week 12', window: '±5 days',
       forms: [
         {
           id: 'v3f1', name: 'End of Treatment', appliedTemplate: null,
