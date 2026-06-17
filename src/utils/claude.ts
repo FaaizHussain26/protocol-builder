@@ -115,7 +115,8 @@ Your output MUST be valid JSON matching this EXACT structure:
 Rules:
 - Model the study as VISITS/LOGS → FORMS → FIELDS, driven by the SOA. Scheduled timepoints are kind "visit"; continuous logs (AE, ConMed) are kind "log".
 - VISIT COMPLETENESS IS MANDATORY: output one visit for EVERY column the SOA defines — all of them. Do not omit, merge, or sample visits. The number of visits you output should match the number of timepoint columns in the SOA. Do not, however, fabricate visits that the SOA does not contain.
-- VISIT NAMING: name visits by their protocol milestone when the SOA names them (Screening, Baseline, Randomization, End of Treatment, Follow-Up); otherwise number them in order ('Visit 1', 'Visit 2', ...). Never put the week/day in the visit name — it goes in "timing".
+- FORMS AND FIELDS ARE MANDATORY: every visit MUST contain its forms (the procedures marked at that visit), and every form MUST contain its fields. A visit with an empty "forms" array, or a form with an empty "fields" array, is INVALID. NEVER return a bare list of visits without their forms and fields — that is a failed response. If producing all visits in full detail is long, prefer slightly fewer fields per form over dropping forms, but every visit must still carry its forms.
+- VISIT NAMING: name visits by their protocol milestone when the SOA names them (Screening, Baseline, Randomization, End of Treatment, Follow-Up); otherwise number them in order ('Visit 1', 'Visit 2', ...). Never put the week/day in the visit name — it goes in "timing". A name like 'Week 12' or 'Day 8' is WRONG; use 'Visit N' and put 'Week 12'/'Day 8' in "timing".
 - Generate the standard clinical forms when the protocol supports them: Informed Consent, Demographics, Eligibility, Medical History, Concomitant Medications, Adverse Events, Vital Signs, Physical Examination, Laboratory Results, ECG, Imaging, Questionnaires, End of Study.
 - Choose the most appropriate field type. Use 'integer'/'decimal' for numerics with the right precision, 'datetime' for date+time, 'multiselect' for pick-many, 'signature' for sign-offs (e.g. Informed Consent), 'file' for document uploads, 'calculated' for derived values (e.g. BMI, Age) and include an "expression".
 - Only include "options" for select/multiselect/radio/checkbox field types.
@@ -181,7 +182,7 @@ export async function buildStudyFromDocuments(
           content: `Build a structured eSource study from the following source document(s):\n\n${protocolText.slice(0, 120000)}`,
         },
       ],
-      max_tokens: 16384,
+      max_tokens: 32768,
       temperature: 0.3,
       response_format: { type: 'json_object' },
     }),
@@ -205,11 +206,23 @@ function normalizeStudy(raw: RawStudy, documents: IngestedDocument[]): StudyMode
   let fieldSeq = 0;
   let ruleSeq = 0;
 
-  const visits: StudyVisit[] = (raw.visits ?? []).map((v, vi) => ({
+  // A visit name that is purely a week/day timepoint (e.g. "Week 12", "Day 8",
+  // "Week 4 (±3 days)"). The week/day belongs in `timing`, not the name.
+  const weekDayName = /^(?:week|wk|day)\s*[-+]?\d+[a-z]?(?:\s*\([^)]*\))?\s*$/i;
+
+  const visits: StudyVisit[] = (raw.visits ?? []).map((v, vi) => {
+    const kind = v.kind === 'log' ? 'log' : 'visit';
+    let name = v.name || `Visit ${vi + 1}`;
+    let timing = v.timing || undefined;
+    if (kind === 'visit' && weekDayName.test(name.trim())) {
+      if (!timing) timing = name.trim();
+      name = `Visit ${vi + 1}`;
+    }
+    return {
     id: v.id || `v${vi + 1}`,
-    name: v.name || `Visit ${vi + 1}`,
-    kind: v.kind === 'log' ? 'log' : 'visit',
-    timing: v.timing || undefined,
+    name,
+    kind,
+    timing,
     window: v.window || undefined,
     forms: (v.forms ?? []).map((f, fi): StudyForm => ({
       id: f.id || `v${vi + 1}f${fi + 1}`,
@@ -240,7 +253,8 @@ function normalizeStudy(raw: RawStudy, documents: IngestedDocument[]): StudyMode
         accepted: null,
       })),
     })),
-  }));
+    };
+  });
 
   return {
     studyTitle: raw.studyTitle || 'Untitled Study',
