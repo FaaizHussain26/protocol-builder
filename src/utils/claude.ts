@@ -51,9 +51,9 @@ Your output MUST be valid JSON matching this EXACT structure:
   "visits": [
     {
       "id": "v1",
-      "name": "string (e.g. 'Screening', 'Baseline', 'Week 4', 'End of Study')",
+      "name": "string — the visit NAME. Use the protocol's named milestone when the SOA names it ('Screening', 'Baseline', 'Randomization', 'End of Treatment', 'Follow-Up'); otherwise number visits sequentially as 'Visit 1', 'Visit 2', 'Visit 3', .... Do NOT name a visit 'Week N' — the week/day belongs in 'timing', not the name.",
       "kind": "visit | log",
-      "timing": "string (e.g. 'Day -28 to -1', 'Week 4')",
+      "timing": "string — the timepoint (e.g. 'Day -28 to -1', 'Week 4', 'Day 1')",
       "window": "string (e.g. '±3 days') or null",
       "forms": [
         {
@@ -114,6 +114,7 @@ Your output MUST be valid JSON matching this EXACT structure:
 
 Rules:
 - Model the study as VISITS/LOGS → FORMS → FIELDS, driven by the SOA. Scheduled timepoints are kind "visit"; continuous logs (AE, ConMed) are kind "log".
+- VISIT NAMING: name visits by their protocol milestone when the SOA names them (Screening, Baseline, Randomization, End of Treatment, Follow-Up); otherwise number them in order ('Visit 1', 'Visit 2', ...). Never put the week/day in the visit name — it goes in "timing". Do not invent extra weekly visits to reach a visit count; only model visits that the SOA actually defines.
 - Generate the standard clinical forms when the protocol supports them: Informed Consent, Demographics, Eligibility, Medical History, Concomitant Medications, Adverse Events, Vital Signs, Physical Examination, Laboratory Results, ECG, Imaging, Questionnaires, End of Study.
 - Choose the most appropriate field type. Use 'integer'/'decimal' for numerics with the right precision, 'datetime' for date+time, 'multiselect' for pick-many, 'signature' for sign-offs (e.g. Informed Consent), 'file' for document uploads, 'calculated' for derived values (e.g. BMI, Age) and include an "expression".
 - Only include "options" for select/multiselect/radio/checkbox field types.
@@ -128,7 +129,7 @@ Rules:
 function buildSystemPrompt(options: BuildOptions): string {
   const o = { ...DEFAULT_OPTIONS, ...options };
   const lines = [BASE_SYSTEM_PROMPT, '', 'Additional requirements:'];
-  lines.push(`- Model approximately ${o.visitCount} visits/logs.`);
+  lines.push(`- The SOA defines the true set of visits/logs — extract exactly those. Treat ~${o.visitCount} only as a rough sizing hint; never invent extra weekly visits to reach a count.`);
   if (o.detailLevel === 'concise') lines.push('- Keep field counts lean (3-6 fields per form).');
   else if (o.detailLevel === 'detailed') lines.push('- Be thorough (6-12 fields per form, rich guidance).');
   else lines.push('- Use a realistic field count (4-8 fields per form).');
