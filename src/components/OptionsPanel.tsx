@@ -55,12 +55,12 @@ export default function OptionsPanel({ options, onChange, disabled }: OptionsPan
         <div style={{ padding: '20px 24px', borderTop: '1px solid #f1f5f9' }}>
           <div style={{ marginBottom: 18 }}>
             <label style={labelStyle}>Number of visits / logs: {o.visitCount}</label>
-            <input type="range" min={3} max={12} step={1} value={o.visitCount}
+            <input type="range" min={3} max={30} step={1} value={o.visitCount}
               disabled={disabled}
               onChange={e => update({ visitCount: Number(e.target.value) })}
               style={{ width: '100%', accentColor: '#2563eb' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-              <span>3</span><span>12</span>
+              <span>3</span><span>30</span>
             </div>
           </div>
 
