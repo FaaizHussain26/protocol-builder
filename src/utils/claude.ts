@@ -16,8 +16,8 @@ export interface BuildOptions {
 
 export const DEFAULT_OPTIONS: Required<Omit<BuildOptions, 'customInstructions'>> & { customInstructions: string } = {
   customInstructions: '',
-  visitCount: 6,
-  detailLevel: 'standard',
+  visitCount: 16,
+  detailLevel: 'detailed',
 };
 
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
