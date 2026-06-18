@@ -178,7 +178,10 @@ interface RawForm extends Omit<StudyForm, 'fields' | 'rules'> {
 // system prompt, running skeleton, and completion all fit within a 128k-token
 // context window. ~160k chars ≈ ~40k tokens, leaving ample room for output.
 const MAX_CHUNK_CHARS = 160000;
-const MAX_OUTPUT_TOKENS = 16384;
+// GPT-5-family models are reasoning models: max_completion_tokens is shared
+// between (hidden) reasoning tokens and the visible JSON output. A small budget
+// gets consumed by reasoning and truncates the JSON, so give a generous cap.
+const MAX_OUTPUT_TOKENS = isGpt5Family ? 32768 : 16384;
 
 // One chat-completion call that returns a parsed RawStudy JSON object.
 async function callModel(systemPrompt: string, userContent: string): Promise<RawStudy> {
@@ -194,9 +197,11 @@ async function callModel(systemPrompt: string, userContent: string): Promise<Raw
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent },
       ],
-      // GPT-5 family renamed the output-token cap and ignores custom temperature.
+      // GPT-5 family renamed the output-token cap, ignores custom temperature,
+      // and accepts reasoning_effort — keep reasoning minimal so the token
+      // budget is spent on the JSON output rather than hidden reasoning.
       ...(isGpt5Family
-        ? { max_completion_tokens: MAX_OUTPUT_TOKENS }
+        ? { max_completion_tokens: MAX_OUTPUT_TOKENS, reasoning_effort: 'minimal' }
         : { max_tokens: MAX_OUTPUT_TOKENS, temperature: 0.3 }),
       response_format: { type: 'json_object' },
     }),
@@ -207,10 +212,31 @@ async function callModel(systemPrompt: string, userContent: string): Promise<Raw
     throw new Error(`OpenAI API error ${res.status}: ${errBody}`);
   }
 
-  const data = (await res.json()) as { choices: Array<{ message: { content: string } }> };
-  let jsonText = data.choices[0]?.message?.content?.trim() ?? '';
+  const data = (await res.json()) as {
+    choices: Array<{ message: { content: string | null }; finish_reason: string }>;
+  };
+  const choice = data.choices[0];
+  let jsonText = choice?.message?.content?.trim() ?? '';
   jsonText = jsonText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-  return JSON.parse(jsonText) as RawStudy;
+
+  if (!jsonText) {
+    throw new Error(
+      `Model returned no content (finish_reason: ${choice?.finish_reason ?? 'unknown'}). ` +
+        `If this is "length", the output token limit was exhausted — reduce MAX_CHUNK_CHARS or raise MAX_OUTPUT_TOKENS.`
+    );
+  }
+  if (choice?.finish_reason === 'length') {
+    throw new Error(
+      'Model response was truncated (finish_reason: length) before the JSON was complete. ' +
+        'Reduce MAX_CHUNK_CHARS so each part produces less output, or raise MAX_OUTPUT_TOKENS.'
+    );
+  }
+
+  try {
+    return JSON.parse(jsonText) as RawStudy;
+  } catch {
+    throw new Error('Model returned invalid/incomplete JSON. This usually means the response was truncated; try reducing MAX_CHUNK_CHARS.');
+  }
 }
 
 // Split combined source text into context-sized chunks, preferring to break on
