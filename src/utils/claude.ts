@@ -29,8 +29,14 @@ const BASE_SYSTEM_PROMPT = `You are an expert clinical-trial eSource builder. Yo
 
 WORKFLOW — follow in order:
 1. Identify the PRIMARY protocol among the documents. Extract: study name, protocol number, phase, indication, sponsor, study objectives, and inclusion/exclusion criteria. Understand protocol structure even when formatting differs between studies.
-2. Locate the Schedule of Activities (SOA) table.
-3. Extract EVERY patient visit/timepoint from the SOA columns (e.g. Screening, Baseline, Randomization, Day 1, Week 4/8/12, End of Treatment, End of Study, Follow-Up). Capture visit sequence, timing, and windows. Continuous/unscheduled logs (Adverse Events, Concomitant Medications) are kind "log".
+2. Locate the Schedule of Activities (SOA) table. This table is the AUTHORITATIVE source for visits — the column headers ARE the visits. Do not infer visits from prose or from your own expectations of a "typical" trial; read them directly off the SOA.
+3. Extract EVERY patient visit/timepoint from the SOA, reading the column headers strictly LEFT-TO-RIGHT and reproducing them IN THAT EXACT ORDER. Critical rules for this step:
+   - Capture ALL columns, including the first and last. Do not drop, skip, merge, or deduplicate visits, and do not stop early. If the SOA has 14 visit columns, output 14 visits.
+   - Use the EXACT visit name/label printed in the SOA header (e.g. "Screening", "Baseline", "Day 1", "Week 2", "Week 4", "Week 8", "Week 12", "End of Treatment", "End of Study", "Follow-Up"). Do NOT renumber, relabel, round, or convert (e.g. never turn "Day 1" into "Week 1", never collapse "Week 4" and "Week 8" into one).
+   - Preserve every intermediate timepoint. If the SOA lists Week 2, 4, 8, 12, 16 you must emit ALL of them — do not output only some (this is the cause of visits appearing in "odd" or irregular numbers). Sequential numeric timepoints must be complete and monotonic.
+   - For each visit, capture its timing and window from the SOA header / footnotes (e.g. "Day -28 to -1", "±3 days").
+   - Continuous/unscheduled logs that span the whole study rather than a single column (Adverse Events, Concomitant Medications) are kind "log"; everything tied to a specific SOA column is kind "visit".
+   - Before moving on, re-count: the number of "visit" entries you emit MUST equal the number of scheduled visit columns in the SOA. If they differ, you missed columns — go back and read them all.
 4. Read the SOA cells: a marker ("X", "✓", "Required", "Optional", "Conditional") means that procedure/form is collected at that visit. Map each marked procedure to a FORM under that visit. A procedure marked across multiple visits produces a form under EACH of those visits.
 5. For each procedure/form, SEARCH the full protocol and supporting documents for the data-collection details and generate protocol-specific fields — never generic placeholders. (e.g. "Vital Signs" → Systolic BP, Diastolic BP, Heart Rate, Respiratory Rate, Temperature, Height, Weight, BMI; "Demographics" → Subject ID, Initials, Date of Birth, Age, Sex, Race, Ethnicity.)
 6. For every field, choose the best field type, add validation rules and required flags, and record full traceability.
@@ -110,6 +116,7 @@ Your output MUST be valid JSON matching this EXACT structure:
 
 Rules:
 - Model the study as VISITS/LOGS → FORMS → FIELDS, driven by the SOA. Scheduled timepoints are kind "visit"; continuous logs (AE, ConMed) are kind "log".
+- VISIT COMPLETENESS IS MANDATORY: the "visits" array (kind "visit") must contain one entry per scheduled visit COLUMN in the SOA — no more, no fewer — in the same left-to-right order, with the exact SOA labels. Never sample, summarize, or output a "representative" subset of visits, and never cap the visit count to a round number. If you are unsure whether a column is a visit, include it. A build that omits SOA visit columns or reorders/renames them is invalid.
 - Generate the standard clinical forms when the protocol supports them: Informed Consent, Demographics, Eligibility, Medical History, Concomitant Medications, Adverse Events, Vital Signs, Physical Examination, Laboratory Results, ECG, Imaging, Questionnaires, End of Study.
 - Choose the most appropriate field type. Use 'integer'/'decimal' for numerics with the right precision, 'datetime' for date+time, 'multiselect' for pick-many, 'signature' for sign-offs (e.g. Informed Consent), 'file' for document uploads, 'calculated' for derived values (e.g. BMI, Age) and include an "expression".
 - Only include "options" for select/multiselect/radio/checkbox field types.
@@ -124,7 +131,9 @@ Rules:
 function buildSystemPrompt(options: BuildOptions): string {
   const o = { ...DEFAULT_OPTIONS, ...options };
   const lines = [BASE_SYSTEM_PROMPT, '', 'Additional requirements:'];
-  lines.push(`- Model approximately ${o.visitCount} visits/logs.`);
+  lines.push(
+    `- The Schedule of Activities is authoritative for the number and order of visits — extract ALL of them, even if that is far more than ${o.visitCount}. Only fall back to roughly ${o.visitCount} visits/logs if NO SOA table can be found in the documents.`
+  );
   if (o.detailLevel === 'concise') lines.push('- Keep field counts lean (3-6 fields per form).');
   else if (o.detailLevel === 'detailed') lines.push('- Be thorough (6-12 fields per form, rich guidance).');
   else lines.push('- Use a realistic field count (4-8 fields per form).');
