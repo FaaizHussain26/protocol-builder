@@ -198,10 +198,10 @@ async function callModel(systemPrompt: string, userContent: string): Promise<Raw
         { role: 'user', content: userContent },
       ],
       // GPT-5 family renamed the output-token cap, ignores custom temperature,
-      // and accepts reasoning_effort — keep reasoning minimal so the token
-      // budget is spent on the JSON output rather than hidden reasoning.
+      // and accepts reasoning_effort (none|low|medium|high|xhigh) — keep it low
+      // so the token budget is spent on the JSON output, not hidden reasoning.
       ...(isGpt5Family
-        ? { max_completion_tokens: MAX_OUTPUT_TOKENS, reasoning_effort: 'minimal' }
+        ? { max_completion_tokens: MAX_OUTPUT_TOKENS, reasoning_effort: 'low' }
         : { max_tokens: MAX_OUTPUT_TOKENS, temperature: 0.3 }),
       response_format: { type: 'json_object' },
     }),
