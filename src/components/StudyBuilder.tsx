@@ -324,6 +324,24 @@ function VisitDetail({ visit, onField, onRule, onEditField, onAddField }: {
   );
 }
 
+// Group a form's fields into ordered sections (preserving first-seen order) so
+// the questionnaire renders as titled subsections. Fields with no section fall
+// into a single leading unlabeled group.
+function groupFieldsBySection(fields: StudyField[]): { key: string; section: string | null; fields: StudyField[] }[] {
+  const order: (string | null)[] = [];
+  const bySection = new Map<string | null, StudyField[]>();
+  for (const f of fields) {
+    const key = f.section?.trim() || null;
+    if (!bySection.has(key)) { bySection.set(key, []); order.push(key); }
+    bySection.get(key)!.push(f);
+  }
+  return order.map((section, i) => ({
+    key: section ?? `__nosection_${i}`,
+    section,
+    fields: bySection.get(section)!,
+  }));
+}
+
 function FormBlock({ form, onField, onRule, onEditField, onAddField }: {
   form: StudyForm;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
@@ -347,10 +365,29 @@ function FormBlock({ form, onField, onRule, onEditField, onAddField }: {
       </div>
 
       <div>
-        {form.fields.map(field => (
-          <FieldCard key={field.id} field={field}
-            onChange={patch => onField(form.id, field.id, patch)}
-            onEdit={() => onEditField(form.id, field)} />
+        {groupFieldsBySection(form.fields).map(group => (
+          <div key={group.key}>
+            {group.section && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '9px 18px', background: '#f1f5f9',
+                borderBottom: '1px solid #e2e8f0', borderTop: '1px solid #eef2f7',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#7c3aed', flexShrink: 0 }} />
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                  {group.section}
+                </span>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>
+                  {group.fields.length} question{group.fields.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            )}
+            {group.fields.map(field => (
+              <FieldCard key={field.id} field={field}
+                onChange={patch => onField(form.id, field.id, patch)}
+                onEdit={() => onEditField(form.id, field)} />
+            ))}
+          </div>
         ))}
       </div>
 
@@ -435,7 +472,6 @@ function FieldCard({ field, onChange, onEdit }: {
           <div style={{ display: 'flex', gap: 7, marginTop: 9, flexWrap: 'wrap', alignItems: 'center' }}>
             <TypeBadge type={field.type} />
             <ConfidenceBadge level={field.confidence} compact />
-            {field.section && <Pill bg="#f1f5f9" color="#475569">{field.section}</Pill>}
             {flagged && <Pill bg="#fffbeb" color="#b45309"><AlertTriangle size={11} /> Needs review</Pill>}
             {(field.source || field.protocolSection || field.page != null) && (
               <span style={{ fontSize: 11, color: '#94a3b8' }}>

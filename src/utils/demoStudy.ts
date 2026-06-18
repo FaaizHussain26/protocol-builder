@@ -20,9 +20,12 @@ export const DEMO_STUDY: StudyModel = {
         {
           id: 'v1f1', name: 'Demographics', appliedTemplate: null,
           fields: [
-            { id: 'f1', label: 'Date of Birth', type: 'date', required: true, confidence: 'high', completionGuidance: 'Enter the participant’s date of birth from a source document.', source: 'Protocol §4.1', reviewStatus: 'pending' },
-            { id: 'f2', label: 'Sex at Birth', type: 'radio', required: true, options: ['Male', 'Female'], confidence: 'high', completionGuidance: 'Record sex as documented in the medical record.', source: 'Protocol §4.1', reviewStatus: 'pending' },
-            { id: 'f3', label: 'Ethnicity', type: 'select', required: false, options: ['Hispanic or Latino', 'Not Hispanic or Latino', 'Not reported'], confidence: 'low', completionGuidance: 'Self-reported; leave blank if the participant declines.', source: 'Inferred', reviewStatus: 'pending' },
+            { id: 'f1', label: 'Subject Initials', type: 'text', required: true, section: 'Identification', confidence: 'high', completionGuidance: 'Enter the participant’s initials (first, middle, last) as permitted locally.', source: 'CRF Completion Guide §3.3', reviewStatus: 'pending' },
+            { id: 'f1b', label: 'Date of Birth', type: 'date', required: true, section: 'Identification', confidence: 'high', completionGuidance: 'Enter the participant’s date of birth from a source document.', source: 'Protocol §4.1', reviewStatus: 'pending' },
+            { id: 'f1c', label: 'Age (years)', type: 'calculated', required: false, section: 'Identification', expression: 'floor((screeningDate - dateOfBirth) / 365.25)', confidence: 'high', completionGuidance: 'Derived automatically from Date of Birth and the screening date.', source: 'Derived', reviewStatus: 'pending' },
+            { id: 'f2', label: 'Sex at Birth', type: 'radio', required: true, section: 'Demographic Detail', options: ['Male', 'Female'], confidence: 'high', completionGuidance: 'Record sex as documented in the medical record.', source: 'Protocol §4.1', reviewStatus: 'pending' },
+            { id: 'f3', label: 'Ethnicity', type: 'select', required: false, section: 'Demographic Detail', options: ['Hispanic or Latino', 'Not Hispanic or Latino', 'Not reported'], confidence: 'low', completionGuidance: 'Self-reported; ask before race. Record "Not reported" if the participant declines.', source: 'Inferred', reviewStatus: 'pending' },
+            { id: 'f3b', label: 'Race', type: 'multiselect', required: false, section: 'Demographic Detail', options: ['American Indian or Alaska Native', 'Asian', 'Black or African American', 'Native Hawaiian or Other Pacific Islander', 'White', 'Not reported'], confidence: 'medium', completionGuidance: 'Self-reported; check all that apply. Record "Not reported" if the participant declines.', source: 'CRF Completion Guide §3.3', reviewStatus: 'pending' },
           ],
           rules: [
             { id: 'r1', description: 'Date of Birth must result in age between 18 and 65 at screening.', ruleType: 'range', confidence: 'high', accepted: null },
@@ -31,9 +34,13 @@ export const DEMO_STUDY: StudyModel = {
         {
           id: 'v1f2', name: 'Vital Signs', appliedTemplate: 'Vital Signs',
           fields: [
-            { id: 'f4', label: 'Systolic BP (mmHg)', type: 'number', required: true, confidence: 'high', completionGuidance: 'Measure after 5 minutes seated rest. Record in mmHg.', source: 'SoA', reviewStatus: 'pending' },
-            { id: 'f5', label: 'Diastolic BP (mmHg)', type: 'number', required: true, confidence: 'high', completionGuidance: 'Measure on the same arm as systolic.', source: 'SoA', reviewStatus: 'pending' },
-            { id: 'f6', label: 'Heart Rate (bpm)', type: 'number', required: true, confidence: 'medium', completionGuidance: 'Record resting heart rate.', source: 'SoA', reviewStatus: 'pending' },
+            { id: 'f4a', label: 'Assessment Date', type: 'date', required: true, section: 'Collection', confidence: 'high', completionGuidance: 'Date the vital signs were measured. Cannot be a future date.', source: 'SoA', reviewStatus: 'pending' },
+            { id: 'f4b', label: 'Height (cm)', type: 'decimal', required: true, section: 'Anthropometry', confidence: 'high', completionGuidance: 'Measure without shoes. Record in centimetres.', source: 'CRF Completion Guide §3.14', reviewStatus: 'pending' },
+            { id: 'f4c', label: 'Weight (kg)', type: 'decimal', required: true, section: 'Anthropometry', confidence: 'high', completionGuidance: 'Measure in light clothing without shoes. Record in kilograms.', source: 'CRF Completion Guide §3.14', reviewStatus: 'pending' },
+            { id: 'f4d', label: 'BMI (kg/m²)', type: 'calculated', required: false, section: 'Anthropometry', expression: 'weight / (height/100)^2', confidence: 'high', completionGuidance: 'Derived automatically from Height and Weight.', source: 'Derived', reviewStatus: 'pending' },
+            { id: 'f4', label: 'Systolic BP (mmHg)', type: 'integer', required: true, section: 'Blood Pressure & Pulse', confidence: 'high', completionGuidance: 'Measure after 5 minutes seated rest. Record in mmHg.', source: 'SoA', reviewStatus: 'pending' },
+            { id: 'f5', label: 'Diastolic BP (mmHg)', type: 'integer', required: true, section: 'Blood Pressure & Pulse', confidence: 'high', completionGuidance: 'Measure on the same arm as systolic.', source: 'SoA', reviewStatus: 'pending' },
+            { id: 'f6', label: 'Pulse (beats/min)', type: 'integer', required: true, section: 'Blood Pressure & Pulse', confidence: 'medium', completionGuidance: 'Record resting pulse rate.', source: 'SoA', reviewStatus: 'pending' },
           ],
           rules: [
             { id: 'r2', description: 'Systolic BP must be between 60 and 250 mmHg.', ruleType: 'range', confidence: 'high', accepted: null },
@@ -76,10 +83,16 @@ export const DEMO_STUDY: StudyModel = {
         {
           id: 'log1f1', name: 'Adverse Events', appliedTemplate: 'Adverse Event Log',
           fields: [
-            { id: 'f11', label: 'AE Term', type: 'text', required: true, confidence: 'high', completionGuidance: 'Record the diagnosis or symptom using standard terminology.', source: 'Protocol §8.1', reviewStatus: 'pending' },
-            { id: 'f12', label: 'Severity', type: 'select', required: true, options: ['Mild', 'Moderate', 'Severe'], confidence: 'high', completionGuidance: 'Grade per protocol severity scale.', source: 'Protocol §8.1', reviewStatus: 'pending' },
-            { id: 'f13', label: 'Serious?', type: 'yesno', required: true, confidence: 'high', completionGuidance: 'Mark Yes if the event meets any seriousness criterion.', source: 'Protocol §8.2', reviewStatus: 'pending' },
-            { id: 'f14', label: 'Relationship to Study Drug', type: 'select', required: true, options: ['Not related', 'Possibly related', 'Probably related', 'Definitely related'], confidence: 'medium', completionGuidance: 'Investigator’s causality assessment.', source: 'Protocol §8.2', reviewStatus: 'pending' },
+            { id: 'f11', label: 'AE Term', type: 'text', required: true, section: 'Event Details', confidence: 'high', completionGuidance: 'Record the diagnosis (preferred) or symptom using standard terminology — not individual symptoms where a diagnosis exists.', source: 'Protocol §8.1', reviewStatus: 'pending' },
+            { id: 'f11b', label: 'Start Date', type: 'date', required: true, section: 'Event Details', confidence: 'high', completionGuidance: 'Date of first onset of the event.', source: 'Protocol §8.1', reviewStatus: 'pending' },
+            { id: 'f11c', label: 'Ongoing?', type: 'yesno', required: true, section: 'Event Details', confidence: 'high', completionGuidance: 'Mark Yes if the event has not yet resolved.', source: 'Protocol §8.1', reviewStatus: 'pending' },
+            { id: 'f11d', label: 'End Date', type: 'date', required: false, section: 'Event Details', confidence: 'medium', completionGuidance: 'Date the event resolved. Complete only if "Ongoing?" is No.', source: 'Protocol §8.1', reviewStatus: 'pending' },
+            { id: 'f12', label: 'Severity', type: 'select', required: true, section: 'Severity & Causality', options: ['Mild', 'Moderate', 'Severe'], confidence: 'high', completionGuidance: 'Grade per protocol severity scale.', source: 'Protocol §8.1', reviewStatus: 'pending' },
+            { id: 'f14', label: 'Relationship to Study Drug', type: 'select', required: true, section: 'Severity & Causality', options: ['Not related', 'Possibly related', 'Probably related', 'Definitely related'], confidence: 'medium', completionGuidance: 'Investigator’s causality assessment.', source: 'Protocol §8.2', reviewStatus: 'pending' },
+            { id: 'f13', label: 'Serious?', type: 'yesno', required: true, section: 'Seriousness', confidence: 'high', completionGuidance: 'Mark Yes if the event meets any seriousness criterion. If Yes, notify the sponsor immediately and complete the SAE form.', source: 'Protocol §8.2', reviewStatus: 'pending' },
+            { id: 'f13b', label: 'Seriousness Criteria', type: 'multiselect', required: false, section: 'Seriousness', options: ['Death', 'Life-threatening', 'Hospitalization', 'Persistent/significant disability', 'Congenital anomaly', 'Other medically important'], confidence: 'medium', completionGuidance: 'Check all that apply. Complete only if "Serious?" is Yes.', source: 'Protocol §8.2', reviewStatus: 'pending' },
+            { id: 'f14b', label: 'Action Taken with Study Drug', type: 'select', required: true, section: 'Action & Outcome', options: ['None', 'Dose reduced', 'Dose interrupted', 'Drug withdrawn'], confidence: 'medium', completionGuidance: 'Latest action taken with study treatment in response to the event.', source: 'Protocol §8.3', reviewStatus: 'pending' },
+            { id: 'f14c', label: 'Outcome', type: 'select', required: true, section: 'Action & Outcome', options: ['Recovered/Resolved', 'Recovering/Resolving', 'Not recovered/Not resolved', 'Recovered with sequelae', 'Fatal', 'Unknown'], confidence: 'high', completionGuidance: 'Record the outcome of the event as of the latest assessment.', source: 'Protocol §8.3', reviewStatus: 'pending' },
           ],
           rules: [
             { id: 'r5', description: 'If "Serious?" is Yes, the SAE form is required.', ruleType: 'required-if', confidence: 'high', accepted: null },

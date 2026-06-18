@@ -49,6 +49,9 @@ WORKFLOW — follow in order:
    - Before moving on, re-count: the number of "visit" entries you emit MUST equal the number of scheduled visit columns in the SOA. If they differ, you missed columns — go back and read them all.
 4. Read the SOA cells: a marker ("X", "✓", "Required", "Optional", "Conditional") means that procedure/form is collected at that visit. Map each marked procedure to a FORM under that visit. A procedure marked across multiple visits produces a form under EACH of those visits.
 5. For each procedure/form, SEARCH the full protocol and supporting documents for the data-collection details and generate protocol-specific fields — never generic placeholders. (e.g. "Vital Signs" → Systolic BP, Diastolic BP, Heart Rate, Respiratory Rate, Temperature, Height, Weight, BMI; "Demographics" → Subject ID, Initials, Date of Birth, Age, Sex, Race, Ethnicity.)
+   - COMPLETENESS — each form is a COMPLETE eSource questionnaire, not a sample. When a CRF/EDC Completion Requirements guide (or the protocol) enumerates the fields of a form — often as numbered sub-items, e.g. "3.16.1 Category", "3.16.2 AE ID", … through "3.16.18 …" — emit EVERY one of those sub-items as its own field, using the exact field label and capturing its data-entry instruction in completionGuidance. Do NOT truncate, sample, deduplicate, or stop at a "typical" handful: a real CRF form commonly has 10-25+ fields, and AE / Concomitant Medication / Laboratory forms have even more. Capture every numbered field in the source.
+   - CONDITIONAL FIELDS — reproduce dependent/branching fields too (e.g. "If Yes, record First Study Identifier / First Site Identifier", "If serious, …", "If Other, specify") as their own fields, and state the triggering condition in completionGuidance. Add a matching "required-if" rule where appropriate.
+   - SECTIONS — organize each form's fields into logical, correctly named subsections via the "section" property, in source order, so the questionnaire renders as grouped sections rather than one flat list (e.g. Vital Signs → "Anthropometry": Height / Weight / BMI, then "Blood Pressure & Pulse": Systolic / Diastolic / Pulse; Adverse Events → "Event Details", "Seriousness", "Causality", "Action Taken & Outcome"). Fields collected together share the same section name; do not leave fields ungrouped when a form has more than ~5 fields.
 6. For every field, choose the best field type, add validation rules and required flags, and record full traceability.
 
 Your output MUST be valid JSON matching this EXACT structure:
@@ -130,6 +133,8 @@ Rules:
 - IF AND ONLY IF a real Schedule of Activities table is present: the "visits" array (kind "visit") should contain one entry per scheduled visit COLUMN that has collected procedures, in the same left-to-right order, with the exact SOA labels — do not sample, summarize, reorder, rename, or cap to a round number, and map each marked procedure to a form under that visit.
 - IF NO Schedule of Activities table exists in ANY document (e.g. only a CRF/EDC Completion Requirements guide, a single manual, or prose is provided): build a best-effort visit schedule INFERRED from the visit/week/timepoint references found across the documents (e.g. Screening, Baseline, Day 1, Week 1, Week 2 … plus any follow-up). Aim for roughly the requested number of visits, name them as clinical visits with kind "visit" (never literally rename procedures), and CRUCIALLY populate EACH inferred visit with the forms and fields that the documents indicate are collected at it — every visit must have at least one form with fields. Distribute the described forms/fields across these visits sensibly rather than piling them all onto one visit. Also raise a "blocker" finding stating that no SOA table was found, so the inferred schedule should be reviewed. Never emit an empty inferred visit.
 - Generate the standard clinical forms when the protocol supports them: Informed Consent, Demographics, Eligibility, Medical History, Concomitant Medications, Adverse Events, Vital Signs, Physical Examination, Laboratory Results, ECG, Imaging, Questionnaires, End of Study.
+- SECTION COMPLETENESS: each visit's set of forms is the list of "sections" shown for that visit — it MUST be complete per the SOA: include every procedure marked at that visit as its own form, and make each form an EXHAUSTIVE questionnaire (every field the source defines for it), never a stub. Faithfully reproducing the source's enumerated fields always wins over inventing a generic subset. A form that the source describes with 18 fields must come back with ~18 fields, not 6.
+- QUESTIONNAIRE GROUPING: in every multi-part form, set the "section" property on fields so the form renders as titled subsections, each holding its detailed questions in source order. Keep section names consistent across fields that belong together.
 - Choose the most appropriate field type. Use 'integer'/'decimal' for numerics with the right precision, 'datetime' for date+time, 'multiselect' for pick-many, 'signature' for sign-offs (e.g. Informed Consent), 'file' for document uploads, 'calculated' for derived values (e.g. BMI, Age) and include an "expression".
 - Only include "options" for select/multiselect/radio/checkbox field types.
 - TRACEABILITY: every field MUST include source (document name), and where determinable protocolSection, page, and a short originalText snippet, plus a confidence. This ensures auditability.
@@ -146,9 +151,9 @@ function buildSystemPrompt(options: BuildOptions): string {
   lines.push(
     `- When a Schedule of Activities table exists, it is authoritative for the number and order of visits — extract ALL of its populated columns even if that is far more than ${o.visitCount}. The ${o.visitCount} figure is only a loose upper guideline, NOT a target: never pad the output with empty or fabricated visits to reach it. If the documents contain no SOA, return only the few visits/logs you can actually populate with forms.`
   );
-  if (o.detailLevel === 'concise') lines.push('- Keep field counts lean (3-6 fields per form).');
-  else if (o.detailLevel === 'detailed') lines.push('- Be thorough (6-12 fields per form, rich guidance).');
-  else lines.push('- Use a realistic field count (4-8 fields per form).');
+  if (o.detailLevel === 'concise') lines.push('- Keep field counts lean (the most important 4-6 fields per form), but still group them into sections.');
+  else if (o.detailLevel === 'detailed') lines.push('- Be EXHAUSTIVE: capture EVERY field the source documents define for each form — do NOT cap at a round number. Rich forms (Adverse Events, Laboratory, Concomitant Medications, ECG) commonly run 12-25+ fields; reproduce every enumerated sub-item with rich completionGuidance, and organize all fields into correctly named sections. Use fewer fields only when the source genuinely defines fewer.');
+  else lines.push('- Use a realistic field count that follows the source — typically 6-12 fields per form, more when the source enumerates more — grouped into sections.');
   if (o.customInstructions.trim()) {
     lines.push('', 'User custom instructions (follow closely):', o.customInstructions.trim());
   }
@@ -181,7 +186,9 @@ const MAX_CHUNK_CHARS = 160000;
 // GPT-5-family models are reasoning models: max_completion_tokens is shared
 // between (hidden) reasoning tokens and the visible JSON output. A small budget
 // gets consumed by reasoning and truncates the JSON, so give a generous cap.
-const MAX_OUTPUT_TOKENS = isGpt5Family ? 32768 : 16384;
+// Exhaustive per-form questionnaires produce large JSON, so keep this high to
+// avoid finish_reason:"length" truncation on the single-call (small-doc) path.
+const MAX_OUTPUT_TOKENS = isGpt5Family ? 65536 : 16384;
 
 // One chat-completion call that returns a parsed RawStudy JSON object.
 async function callModel(systemPrompt: string, userContent: string): Promise<RawStudy> {
