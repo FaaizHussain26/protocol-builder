@@ -45,7 +45,7 @@ export default function OptionsPanel({ options, onChange, disabled }: OptionsPan
         <div style={{ flex: 1 }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Customize the Build</p>
           <p style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>
-            {open ? 'Adjust how the AI builds your structured study' : 'Prompt, number of visits, detail level'}
+            {open ? 'Adjust how the AI builds your structured study' : 'Prompt and detail level'}
           </p>
         </div>
         {open ? <ChevronUp size={18} color="#94a3b8" /> : <ChevronDown size={18} color="#94a3b8" />}
@@ -53,17 +53,6 @@ export default function OptionsPanel({ options, onChange, disabled }: OptionsPan
 
       {open && (
         <div style={{ padding: '20px 24px', borderTop: '1px solid #f1f5f9' }}>
-          <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Number of visits / logs: {o.visitCount}</label>
-            <input type="range" min={3} max={30} step={1} value={o.visitCount}
-              disabled={disabled}
-              onChange={e => update({ visitCount: Number(e.target.value) })}
-              style={{ width: '100%', accentColor: '#2563eb' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-              <span>3</span><span>30</span>
-            </div>
-          </div>
-
           <div style={{ marginBottom: 18 }}>
             <label style={labelStyle}>Detail level</label>
             <div style={{ display: 'flex', gap: 8 }}>

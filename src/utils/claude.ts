@@ -16,7 +16,7 @@ export interface BuildOptions {
 
 export const DEFAULT_OPTIONS: Required<Omit<BuildOptions, 'customInstructions'>> & { customInstructions: string } = {
   customInstructions: '',
-  visitCount: 16,
+  visitCount: 30,
   detailLevel: 'detailed',
 };
 
@@ -353,20 +353,24 @@ export async function buildStudyFromDocuments(
     return normalizeStudy(raw, documents);
   }
 
-  // Large inputs: process each chunk in order, carrying a compact skeleton
-  // forward so the model reuses visit/form names, then merge every partial
-  // result. This keeps each request within the context window and lets the
-  // final study exceed any single-response size limit.
-  let acc: RawStudy = {};
-  for (let i = 0; i < chunks.length; i++) {
-    const userContent =
-      `You are building ONE eSource study from documents split into ${chunks.length} parts. This is PART ${i + 1} of ${chunks.length}.\n\n` +
-      `STRUCTURE EXTRACTED FROM EARLIER PARTS — reuse these visit and form names EXACTLY when this part refers to the same thing, so results merge cleanly. Only add a new visit if this part reveals a genuinely new SOA timepoint:\n${skeletonSummary(acc)}\n\n` +
-      `From the PART ${i + 1} text below, return the study JSON: add any NEW visits/forms/fields found here and ENRICH existing forms with the fields/rules this part describes (prefer attaching forms to existing visit names over creating duplicates). Capture study metadata, eligibility, and findings whenever this part contains them. Be concise — keep this single response well within the output limit; remaining detail will come from other parts.\n\n` +
-      `===== PART ${i + 1} TEXT =====\n${chunks[i]}`;
-    const partial = await callModel(systemPrompt, userContent);
-    acc = mergeRawStudies(acc, partial);
-  }
+  // Large inputs: process the FIRST chunk on its own to establish the visit
+  // skeleton (the SOA-bearing document is sorted first), then process the
+  // remaining chunks IN PARALLEL sharing that skeleton. This collapses N
+  // sequential round-trips into two waves, which is dramatically faster, while
+  // still letting later chunks reuse the protocol's visit/form names.
+  const buildPrompt = (i: number, skeleton: string) =>
+    `You are building ONE eSource study from documents split into ${chunks.length} parts. This is PART ${i + 1} of ${chunks.length}.\n\n` +
+    `STRUCTURE EXTRACTED FROM OTHER PARTS — reuse these visit and form names EXACTLY when this part refers to the same thing, so results merge cleanly. Only add a new visit if this part reveals a genuinely new SOA timepoint:\n${skeleton}\n\n` +
+    `From the PART ${i + 1} text below, return the study JSON: add any NEW visits/forms/fields found here and ENRICH existing forms with the fields/rules this part describes (prefer attaching forms to existing visit names over creating duplicates). Capture study metadata, eligibility, and findings whenever this part contains them. Be concise — keep this single response well within the output limit; remaining detail will come from other parts.\n\n` +
+    `===== PART ${i + 1} TEXT =====\n${chunks[i]}`;
+
+  let acc = await callModel(systemPrompt, buildPrompt(0, '(nothing extracted yet)'));
+  const skeleton = skeletonSummary(acc);
+
+  const rest = await Promise.all(
+    chunks.slice(1).map((_, idx) => callModel(systemPrompt, buildPrompt(idx + 1, skeleton)))
+  );
+  for (const partial of rest) acc = mergeRawStudies(acc, partial);
 
   return normalizeStudy(acc, documents);
 }
