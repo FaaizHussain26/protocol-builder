@@ -1,17 +1,34 @@
 // Extract plain text from uploaded files (PDF, DOCX, TXT)
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 
+// Heuristic: does this document contain a Schedule of Activities table? Such a
+// document is the real protocol and should be processed first so the model
+// anchors its visit schedule on it (and so the SOA stays within the char cap).
+const SOA_MARKER = /schedule of (activities|assessments|procedures|events)/i;
+
 // Extract and combine text from multiple files with clear per-document headers.
+// Documents that contain an SOA are placed first.
 export async function extractTextFromFiles(files: File[]): Promise<string> {
-  const parts: string[] = [];
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const text = await extractTextFromFile(file);
-    const header = files.length > 1
-      ? `===== DOCUMENT ${i + 1} of ${files.length}: ${file.name} =====`
-      : `===== DOCUMENT: ${file.name} =====`;
-    parts.push(`${header}\n\n${text.trim()}`);
-  }
+  const docs = await Promise.all(
+    Array.from(files).map(async file => {
+      const text = (await extractTextFromFile(file)).trim();
+      return { name: file.name, text, hasSOA: SOA_MARKER.test(text) };
+    })
+  );
+
+  // Stable sort: SOA-bearing documents (the protocol) come before the rest.
+  const ordered = docs
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => Number(b.d.hasSOA) - Number(a.d.hasSOA) || a.i - b.i)
+    .map(x => x.d);
+
+  const parts = ordered.map((d, i) => {
+    const header = ordered.length > 1
+      ? `===== DOCUMENT ${i + 1} of ${ordered.length}: ${d.name}${d.hasSOA ? ' (contains Schedule of Activities)' : ''} =====`
+      : `===== DOCUMENT: ${d.name} =====`;
+    return `${header}\n\n${d.text}`;
+  });
+
   return parts.join('\n\n\n');
 }
 

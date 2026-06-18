@@ -21,7 +21,7 @@ export const DEFAULT_OPTIONS: Required<Omit<BuildOptions, 'customInstructions'>>
 };
 
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
-const OPENAI_MODEL = (import.meta.env.VITE_OPENAI_MODEL as string) || 'gpt-5.5';
+const OPENAI_MODEL = 'gpt-5.5';
 
 export const isConfigured = !!OPENAI_KEY;
 
@@ -31,8 +31,13 @@ const isGpt5Family = /^gpt-5/i.test(OPENAI_MODEL);
 
 const BASE_SYSTEM_PROMPT = `You are an expert clinical-trial eSource builder. You read one or more uploaded study documents (Clinical Study Protocol, Schedule of Activities/Assessments (SOA), Laboratory/Pharmacy/Imaging manuals, Questionnaires, study guidelines, sponsor references) and produce a STRUCTURED, EDITABLE eSource STUDY MODEL — visits → forms → typed fields — driven by the Schedule of Activities. This is not a flat list of questions.
 
+DOCUMENT ROLES — when multiple documents are provided, recognize what each is FOR:
+- The Clinical Study Protocol (the document that contains the Schedule of Activities / Table of Procedures, objectives, eligibility, and visit timing) is the AUTHORITATIVE source for the VISIT SCHEDULE. The visit list MUST come from this document's SOA.
+- A "CRF Completion Requirements", "EDC Completion Guidelines", or similar data-entry guide describes how to FILL forms/fields (field labels, formats, completion guidance). Use it ONLY to enrich field-level detail and completion guidance — NEVER use it to define the visit schedule, and NEVER treat it as the primary protocol when an actual protocol with an SOA is also present.
+- If you find an SOA in the protocol, the CRF/EDC guide does NOT override it. Build visits from the protocol's SOA, then layer in field detail from the CRF guide where the form names match.
+
 WORKFLOW — follow in order:
-1. Identify the PRIMARY protocol among the documents. Extract: study name, protocol number, phase, indication, sponsor, study objectives, and inclusion/exclusion criteria. Understand protocol structure even when formatting differs between studies.
+1. Identify the PRIMARY protocol among the documents — the one containing the Schedule of Activities and study design (NOT a CRF/EDC completion guide). Extract: study name, protocol number, phase, indication, sponsor, study objectives, and inclusion/exclusion criteria. Understand protocol structure even when formatting differs between studies.
 2. Locate the Schedule of Activities (SOA) table. It may be titled "Schedule of Activities", "Schedule of Assessments", "Schedule of Procedures/Assessments", "Schedule of Events", or appear as a numbered table (e.g. "Table 3"). This table is the AUTHORITATIVE source for visits — the column headers ARE the visits. Do not infer visits from prose or from your own expectations of a "typical" trial; read them directly off the SOA.
    - IMPORTANT: the SOA is extracted from a PDF, so its grid is flattened to text and may look scrambled — a multi-row/rotated header where visit labels are split across lines (e.g. "Visit" then a row like "1 2 3 3 4 4 4 4 5 6 ..." with sub-labels "a b a b c d ..." on the next line, forming visits 1, 2, 3a, 3b, 4a, 4b, 4c, 4d, 5, 6, ...), a "Study Day(s)" row giving each visit's day, and "Study Phase" groupings (e.g. Screening, Baseline, Treatment, Follow-up). Carefully reconstruct the FULL ordered list of visit columns from these header rows, pairing each visit label with its study day. Treat sub-visits like "3a"/"3b" as distinct visits. Do NOT collapse the table into a few broad phases (e.g. do not output just "Treatment Period") — output each individual visit column.
 3. Extract EVERY patient visit/timepoint from the SOA, reading the column headers strictly LEFT-TO-RIGHT and reproducing them IN THAT EXACT ORDER. Critical rules for this step:
@@ -123,7 +128,7 @@ Rules:
 - Model the study as VISITS/LOGS → FORMS → FIELDS, driven by the SOA. Scheduled timepoints are kind "visit"; continuous logs (AE, ConMed) are kind "log".
 - NEVER output an empty visit. Every visit/log in the "visits" array MUST contain at least one form with at least one field. Do NOT create a visit just because a timepoint (e.g. "Week 6") is mentioned somewhere in the text — only create a visit if you can actually populate it with the procedures/forms collected at it. Drop any timepoint you cannot populate. An empty "forms": [] array is invalid and must never appear.
 - IF AND ONLY IF a real Schedule of Activities table is present: the "visits" array (kind "visit") should contain one entry per scheduled visit COLUMN that has collected procedures, in the same left-to-right order, with the exact SOA labels — do not sample, summarize, reorder, rename, or cap to a round number, and map each marked procedure to a form under that visit.
-- IF NO Schedule of Activities table exists in the documents (e.g. the input is a CRF/EDC Completion Requirements guide, a single manual, or prose only): DO NOT fabricate a week-by-week visit timeline and DO NOT invent intermediate timepoints. Instead, organize the forms and fields that ARE described in the document into the smallest set of visits/logs that the document actually supports (commonly a single "General" or "Screening" visit plus any clearly-described logs), and raise a "blocker" finding stating that no SOA was found so the visit schedule could not be derived. It is far better to return a few well-populated visits than many empty ones.
+- IF NO Schedule of Activities table exists in ANY document (e.g. only a CRF/EDC Completion Requirements guide, a single manual, or prose is provided): build a best-effort visit schedule INFERRED from the visit/week/timepoint references found across the documents (e.g. Screening, Baseline, Day 1, Week 1, Week 2 … plus any follow-up). Aim for roughly the requested number of visits, name them as clinical visits with kind "visit" (never literally rename procedures), and CRUCIALLY populate EACH inferred visit with the forms and fields that the documents indicate are collected at it — every visit must have at least one form with fields. Distribute the described forms/fields across these visits sensibly rather than piling them all onto one visit. Also raise a "blocker" finding stating that no SOA table was found, so the inferred schedule should be reviewed. Never emit an empty inferred visit.
 - Generate the standard clinical forms when the protocol supports them: Informed Consent, Demographics, Eligibility, Medical History, Concomitant Medications, Adverse Events, Vital Signs, Physical Examination, Laboratory Results, ECG, Imaging, Questionnaires, End of Study.
 - Choose the most appropriate field type. Use 'integer'/'decimal' for numerics with the right precision, 'datetime' for date+time, 'multiselect' for pick-many, 'signature' for sign-offs (e.g. Informed Consent), 'file' for document uploads, 'calculated' for derived values (e.g. BMI, Age) and include an "expression".
 - Only include "options" for select/multiselect/radio/checkbox field types.
@@ -169,19 +174,14 @@ interface RawForm extends Omit<StudyForm, 'fields' | 'rules'> {
   rules?: Array<Omit<StudyForm['rules'][number], 'accepted'>>;
 }
 
-// Max characters of source text sent to the model. Clinical protocols are
-// large (a 100-page protocol is ~250k chars) and the Schedule of Activities
-// often sits past the halfway point, so this must be generous enough to reach
-// it. ~600k chars ≈ ~150k tokens, well within the model's context window.
-const MAX_SOURCE_CHARS = 600000;
+// Source documents are split into chunks small enough that one chunk plus the
+// system prompt, running skeleton, and completion all fit within a 128k-token
+// context window. ~160k chars ≈ ~40k tokens, leaving ample room for output.
+const MAX_CHUNK_CHARS = 160000;
+const MAX_OUTPUT_TOKENS = 16384;
 
-export async function buildStudyFromDocuments(
-  protocolText: string,
-  documents: IngestedDocument[],
-  options: BuildOptions = {}
-): Promise<StudyModel> {
-  const systemPrompt = buildSystemPrompt(options);
-
+// One chat-completion call that returns a parsed RawStudy JSON object.
+async function callModel(systemPrompt: string, userContent: string): Promise<RawStudy> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -192,15 +192,12 @@ export async function buildStudyFromDocuments(
       model: OPENAI_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: `Build a structured eSource study from the following source document(s):\n\n${protocolText.slice(0, MAX_SOURCE_CHARS)}`,
-        },
+        { role: 'user', content: userContent },
       ],
       // GPT-5 family renamed the output-token cap and ignores custom temperature.
       ...(isGpt5Family
-        ? { max_completion_tokens: 16384 }
-        : { max_tokens: 16384, temperature: 0.3 }),
+        ? { max_completion_tokens: MAX_OUTPUT_TOKENS }
+        : { max_tokens: MAX_OUTPUT_TOKENS, temperature: 0.3 }),
       response_format: { type: 'json_object' },
     }),
   });
@@ -213,9 +210,139 @@ export async function buildStudyFromDocuments(
   const data = (await res.json()) as { choices: Array<{ message: { content: string } }> };
   let jsonText = data.choices[0]?.message?.content?.trim() ?? '';
   jsonText = jsonText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-  const raw = JSON.parse(jsonText) as RawStudy;
+  return JSON.parse(jsonText) as RawStudy;
+}
 
-  return normalizeStudy(raw, documents);
+// Split combined source text into context-sized chunks, preferring to break on
+// document, then page, then paragraph boundaries so tables (the SOA especially)
+// stay intact within a single chunk.
+function splitIntoChunks(text: string, maxChars: number): string[] {
+  if (text.length <= maxChars) return [text];
+  const segments = text.split(/(?=\n===== DOCUMENT)|(?=\n\[Page )|(?=\n\n)/);
+  const chunks: string[] = [];
+  let current = '';
+  for (const seg of segments) {
+    if (seg.length > maxChars) {
+      if (current) { chunks.push(current); current = ''; }
+      for (let i = 0; i < seg.length; i += maxChars) chunks.push(seg.slice(i, i + maxChars));
+      continue;
+    }
+    if (current.length + seg.length > maxChars) {
+      chunks.push(current);
+      current = seg;
+    } else {
+      current += seg;
+    }
+  }
+  if (current.trim()) chunks.push(current);
+  return chunks;
+}
+
+// Compact list of visits/forms extracted so far, given to later chunks so the
+// model reuses the same names and partial results merge cleanly.
+function skeletonSummary(acc: RawStudy): string {
+  const visits = (acc.visits ?? []).map(v => {
+    const forms = (v.forms ?? []).map(f => f.name).filter(Boolean).join(', ');
+    return `- ${v.name}${v.timing ? ` (${v.timing})` : ''}${forms ? ` → forms: ${forms}` : ''}`;
+  });
+  return visits.length ? visits.join('\n') : '(nothing extracted yet)';
+}
+
+const norm = (s?: string | null) => (s ?? '').trim().toLowerCase();
+
+// Merge a newly-returned partial study into the accumulator, deduplicating by
+// visit name, form name (within a visit), field label, eligibility criterion,
+// and finding title.
+function mergeRawStudies(a: RawStudy, b: RawStudy): RawStudy {
+  const out: RawStudy = {
+    studyTitle: a.studyTitle || b.studyTitle,
+    studyDescription: a.studyDescription || b.studyDescription,
+    protocolNumber: a.protocolNumber ?? b.protocolNumber,
+    sponsor: a.sponsor ?? b.sponsor,
+    phase: a.phase ?? b.phase,
+    indication: a.indication ?? b.indication,
+    objectives: a.objectives ?? b.objectives,
+    visits: [...(a.visits ?? [])],
+    eligibility: [...(a.eligibility ?? [])],
+    findings: [...(a.findings ?? [])],
+  };
+
+  for (const bv of b.visits ?? []) {
+    const existing = out.visits!.find(av => norm(av.name) === norm(bv.name));
+    if (!existing) { out.visits!.push(bv); continue; }
+    existing.timing = existing.timing || bv.timing;
+    existing.window = existing.window || bv.window;
+    existing.forms = existing.forms ?? [];
+    for (const bf of bv.forms ?? []) {
+      const ef = existing.forms.find(f => norm(f.name) === norm(bf.name));
+      if (!ef) { existing.forms.push(bf); continue; }
+      ef.description = ef.description || bf.description;
+      ef.appliedTemplate = ef.appliedTemplate || bf.appliedTemplate;
+      ef.fields = ef.fields ?? [];
+      const seenFields = new Set(ef.fields.map(x => norm(x.label)));
+      for (const fld of bf.fields ?? []) {
+        if (seenFields.has(norm(fld.label))) continue;
+        ef.fields.push(fld);
+        seenFields.add(norm(fld.label));
+      }
+      ef.rules = ef.rules ?? [];
+      const seenRules = new Set(ef.rules.map(x => norm(x.description)));
+      for (const r of bf.rules ?? []) {
+        if (seenRules.has(norm(r.description))) continue;
+        ef.rules.push(r);
+        seenRules.add(norm(r.description));
+      }
+    }
+  }
+
+  const seenElig = new Set((out.eligibility ?? []).map(e => norm(e.criterion)));
+  for (const e of b.eligibility ?? []) {
+    if (seenElig.has(norm(e.criterion))) continue;
+    out.eligibility!.push(e);
+    seenElig.add(norm(e.criterion));
+  }
+  const seenFind = new Set((out.findings ?? []).map(f => norm(f.title)));
+  for (const f of b.findings ?? []) {
+    if (seenFind.has(norm(f.title))) continue;
+    out.findings!.push(f);
+    seenFind.add(norm(f.title));
+  }
+  return out;
+}
+
+export async function buildStudyFromDocuments(
+  protocolText: string,
+  documents: IngestedDocument[],
+  options: BuildOptions = {}
+): Promise<StudyModel> {
+  const systemPrompt = buildSystemPrompt(options);
+  const chunks = splitIntoChunks(protocolText, MAX_CHUNK_CHARS);
+
+  // Small inputs: a single call is enough.
+  if (chunks.length === 1) {
+    const raw = await callModel(
+      systemPrompt,
+      `Build a structured eSource study from the following source document(s):\n\n${chunks[0]}`
+    );
+    return normalizeStudy(raw, documents);
+  }
+
+  // Large inputs: process each chunk in order, carrying a compact skeleton
+  // forward so the model reuses visit/form names, then merge every partial
+  // result. This keeps each request within the context window and lets the
+  // final study exceed any single-response size limit.
+  let acc: RawStudy = {};
+  for (let i = 0; i < chunks.length; i++) {
+    const userContent =
+      `You are building ONE eSource study from documents split into ${chunks.length} parts. This is PART ${i + 1} of ${chunks.length}.\n\n` +
+      `STRUCTURE EXTRACTED FROM EARLIER PARTS — reuse these visit and form names EXACTLY when this part refers to the same thing, so results merge cleanly. Only add a new visit if this part reveals a genuinely new SOA timepoint:\n${skeletonSummary(acc)}\n\n` +
+      `From the PART ${i + 1} text below, return the study JSON: add any NEW visits/forms/fields found here and ENRICH existing forms with the fields/rules this part describes (prefer attaching forms to existing visit names over creating duplicates). Capture study metadata, eligibility, and findings whenever this part contains them. Be concise — keep this single response well within the output limit; remaining detail will come from other parts.\n\n` +
+      `===== PART ${i + 1} TEXT =====\n${chunks[i]}`;
+    const partial = await callModel(systemPrompt, userContent);
+    acc = mergeRawStudies(acc, partial);
+  }
+
+  return normalizeStudy(acc, documents);
 }
 
 // Attach review state, fill defaults, and guarantee stable IDs.
