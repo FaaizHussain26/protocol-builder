@@ -116,7 +116,9 @@ Your output MUST be valid JSON matching this EXACT structure:
 
 Rules:
 - Model the study as VISITS/LOGS → FORMS → FIELDS, driven by the SOA. Scheduled timepoints are kind "visit"; continuous logs (AE, ConMed) are kind "log".
-- VISIT COMPLETENESS IS MANDATORY: the "visits" array (kind "visit") must contain one entry per scheduled visit COLUMN in the SOA — no more, no fewer — in the same left-to-right order, with the exact SOA labels. Never sample, summarize, or output a "representative" subset of visits, and never cap the visit count to a round number. If you are unsure whether a column is a visit, include it. A build that omits SOA visit columns or reorders/renames them is invalid.
+- NEVER output an empty visit. Every visit/log in the "visits" array MUST contain at least one form with at least one field. Do NOT create a visit just because a timepoint (e.g. "Week 6") is mentioned somewhere in the text — only create a visit if you can actually populate it with the procedures/forms collected at it. Drop any timepoint you cannot populate. An empty "forms": [] array is invalid and must never appear.
+- IF AND ONLY IF a real Schedule of Activities table is present: the "visits" array (kind "visit") should contain one entry per scheduled visit COLUMN that has collected procedures, in the same left-to-right order, with the exact SOA labels — do not sample, summarize, reorder, rename, or cap to a round number, and map each marked procedure to a form under that visit.
+- IF NO Schedule of Activities table exists in the documents (e.g. the input is a CRF/EDC Completion Requirements guide, a single manual, or prose only): DO NOT fabricate a week-by-week visit timeline and DO NOT invent intermediate timepoints. Instead, organize the forms and fields that ARE described in the document into the smallest set of visits/logs that the document actually supports (commonly a single "General" or "Screening" visit plus any clearly-described logs), and raise a "blocker" finding stating that no SOA was found so the visit schedule could not be derived. It is far better to return a few well-populated visits than many empty ones.
 - Generate the standard clinical forms when the protocol supports them: Informed Consent, Demographics, Eligibility, Medical History, Concomitant Medications, Adverse Events, Vital Signs, Physical Examination, Laboratory Results, ECG, Imaging, Questionnaires, End of Study.
 - Choose the most appropriate field type. Use 'integer'/'decimal' for numerics with the right precision, 'datetime' for date+time, 'multiselect' for pick-many, 'signature' for sign-offs (e.g. Informed Consent), 'file' for document uploads, 'calculated' for derived values (e.g. BMI, Age) and include an "expression".
 - Only include "options" for select/multiselect/radio/checkbox field types.
@@ -132,7 +134,7 @@ function buildSystemPrompt(options: BuildOptions): string {
   const o = { ...DEFAULT_OPTIONS, ...options };
   const lines = [BASE_SYSTEM_PROMPT, '', 'Additional requirements:'];
   lines.push(
-    `- The Schedule of Activities is authoritative for the number and order of visits — extract ALL of them, even if that is far more than ${o.visitCount}. Only fall back to roughly ${o.visitCount} visits/logs if NO SOA table can be found in the documents.`
+    `- When a Schedule of Activities table exists, it is authoritative for the number and order of visits — extract ALL of its populated columns even if that is far more than ${o.visitCount}. The ${o.visitCount} figure is only a loose upper guideline, NOT a target: never pad the output with empty or fabricated visits to reach it. If the documents contain no SOA, return only the few visits/logs you can actually populate with forms.`
   );
   if (o.detailLevel === 'concise') lines.push('- Keep field counts lean (3-6 fields per form).');
   else if (o.detailLevel === 'detailed') lines.push('- Be thorough (6-12 fields per form, rich guidance).');
@@ -208,13 +210,16 @@ function normalizeStudy(raw: RawStudy, documents: IngestedDocument[]): StudyMode
   let fieldSeq = 0;
   let ruleSeq = 0;
 
-  const visits: StudyVisit[] = (raw.visits ?? []).map((v, vi) => ({
+  const visits: StudyVisit[] = (raw.visits ?? []).map((v, vi): StudyVisit => ({
     id: v.id || `v${vi + 1}`,
     name: v.name || `Visit ${vi + 1}`,
     kind: v.kind === 'log' ? 'log' : 'visit',
     timing: v.timing || undefined,
     window: v.window || undefined,
-    forms: (v.forms ?? []).map((f, fi): StudyForm => ({
+    forms: (v.forms ?? [])
+      // Drop forms that carry no fields — they add empty noise to the UI.
+      .filter(f => (f.fields ?? []).length > 0)
+      .map((f, fi): StudyForm => ({
       id: f.id || `v${vi + 1}f${fi + 1}`,
       name: f.name || `Form ${fi + 1}`,
       description: f.description || undefined,
@@ -243,7 +248,9 @@ function normalizeStudy(raw: RawStudy, documents: IngestedDocument[]): StudyMode
         accepted: null,
       })),
     })),
-  }));
+  }))
+    // Drop visits with no populated forms (e.g. timepoints mentioned but never scheduled).
+    .filter(v => v.forms.length > 0);
 
   return {
     studyTitle: raw.studyTitle || 'Untitled Study',
