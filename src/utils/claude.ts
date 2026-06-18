@@ -21,15 +21,20 @@ export const DEFAULT_OPTIONS: Required<Omit<BuildOptions, 'customInstructions'>>
 };
 
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
-const OPENAI_MODEL = (import.meta.env.VITE_OPENAI_MODEL as string) || 'gpt-4.1';
+const OPENAI_MODEL = (import.meta.env.VITE_OPENAI_MODEL as string) || 'gpt-5.5';
 
 export const isConfigured = !!OPENAI_KEY;
+
+// GPT-5-family models use `max_completion_tokens` (not `max_tokens`) and only
+// support the default temperature, so the request body must adapt to the model.
+const isGpt5Family = /^gpt-5/i.test(OPENAI_MODEL);
 
 const BASE_SYSTEM_PROMPT = `You are an expert clinical-trial eSource builder. You read one or more uploaded study documents (Clinical Study Protocol, Schedule of Activities/Assessments (SOA), Laboratory/Pharmacy/Imaging manuals, Questionnaires, study guidelines, sponsor references) and produce a STRUCTURED, EDITABLE eSource STUDY MODEL — visits → forms → typed fields — driven by the Schedule of Activities. This is not a flat list of questions.
 
 WORKFLOW — follow in order:
 1. Identify the PRIMARY protocol among the documents. Extract: study name, protocol number, phase, indication, sponsor, study objectives, and inclusion/exclusion criteria. Understand protocol structure even when formatting differs between studies.
-2. Locate the Schedule of Activities (SOA) table. This table is the AUTHORITATIVE source for visits — the column headers ARE the visits. Do not infer visits from prose or from your own expectations of a "typical" trial; read them directly off the SOA.
+2. Locate the Schedule of Activities (SOA) table. It may be titled "Schedule of Activities", "Schedule of Assessments", "Schedule of Procedures/Assessments", "Schedule of Events", or appear as a numbered table (e.g. "Table 3"). This table is the AUTHORITATIVE source for visits — the column headers ARE the visits. Do not infer visits from prose or from your own expectations of a "typical" trial; read them directly off the SOA.
+   - IMPORTANT: the SOA is extracted from a PDF, so its grid is flattened to text and may look scrambled — a multi-row/rotated header where visit labels are split across lines (e.g. "Visit" then a row like "1 2 3 3 4 4 4 4 5 6 ..." with sub-labels "a b a b c d ..." on the next line, forming visits 1, 2, 3a, 3b, 4a, 4b, 4c, 4d, 5, 6, ...), a "Study Day(s)" row giving each visit's day, and "Study Phase" groupings (e.g. Screening, Baseline, Treatment, Follow-up). Carefully reconstruct the FULL ordered list of visit columns from these header rows, pairing each visit label with its study day. Treat sub-visits like "3a"/"3b" as distinct visits. Do NOT collapse the table into a few broad phases (e.g. do not output just "Treatment Period") — output each individual visit column.
 3. Extract EVERY patient visit/timepoint from the SOA, reading the column headers strictly LEFT-TO-RIGHT and reproducing them IN THAT EXACT ORDER. Critical rules for this step:
    - Capture ALL columns, including the first and last. Do not drop, skip, merge, or deduplicate visits, and do not stop early. If the SOA has 14 visit columns, output 14 visits.
    - Use the EXACT visit name/label printed in the SOA header (e.g. "Screening", "Baseline", "Day 1", "Week 2", "Week 4", "Week 8", "Week 12", "End of Treatment", "End of Study", "Follow-Up"). Do NOT renumber, relabel, round, or convert (e.g. never turn "Day 1" into "Week 1", never collapse "Week 4" and "Week 8" into one).
@@ -164,6 +169,12 @@ interface RawForm extends Omit<StudyForm, 'fields' | 'rules'> {
   rules?: Array<Omit<StudyForm['rules'][number], 'accepted'>>;
 }
 
+// Max characters of source text sent to the model. Clinical protocols are
+// large (a 100-page protocol is ~250k chars) and the Schedule of Activities
+// often sits past the halfway point, so this must be generous enough to reach
+// it. ~600k chars ≈ ~150k tokens, well within the model's context window.
+const MAX_SOURCE_CHARS = 600000;
+
 export async function buildStudyFromDocuments(
   protocolText: string,
   documents: IngestedDocument[],
@@ -183,11 +194,13 @@ export async function buildStudyFromDocuments(
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `Build a structured eSource study from the following source document(s):\n\n${protocolText.slice(0, 120000)}`,
+          content: `Build a structured eSource study from the following source document(s):\n\n${protocolText.slice(0, MAX_SOURCE_CHARS)}`,
         },
       ],
-      max_tokens: 16384,
-      temperature: 0.3,
+      // GPT-5 family renamed the output-token cap and ignores custom temperature.
+      ...(isGpt5Family
+        ? { max_completion_tokens: 16384 }
+        : { max_tokens: 16384, temperature: 0.3 }),
       response_format: { type: 'json_object' },
     }),
   });
