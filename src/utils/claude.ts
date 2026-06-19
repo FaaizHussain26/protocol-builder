@@ -20,144 +20,126 @@ export const DEFAULT_OPTIONS: Required<Omit<BuildOptions, 'customInstructions'>>
   detailLevel: 'detailed',
 };
 
-const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
-const OPENAI_MODEL = 'gpt-5.5';
+// Azure OpenAI configuration — all values come from env (no secret in source).
+// ENDPOINT e.g. "https://<resource>.openai.azure.com/". DEPLOYMENT is the name
+// you gave the model deployment in the Azure portal (NOT necessarily the model
+// name) and goes in the request URL. API_VERSION pins the Azure REST contract.
+const AZURE_ENDPOINT = ((import.meta.env.VITE_AZURE_OPENAI_ENDPOINT as string) || '').replace(/\/+$/, '');
+const AZURE_API_KEY = import.meta.env.VITE_AZURE_OPENAI_API_KEY as string;
+const AZURE_DEPLOYMENT = (import.meta.env.VITE_AZURE_OPENAI_DEPLOYMENT as string) || 'gpt-4o';
+const AZURE_API_VERSION = (import.meta.env.VITE_AZURE_OPENAI_API_VERSION as string) || '2024-10-21';
 
-export const isConfigured = !!OPENAI_KEY;
+export const isConfigured = !!AZURE_API_KEY && !!AZURE_ENDPOINT;
 
-// GPT-5-family models use `max_completion_tokens` (not `max_tokens`) and only
-// support the default temperature, so the request body must adapt to the model.
-const isGpt5Family = /^gpt-5/i.test(OPENAI_MODEL);
+// gpt-5-family deployments use `max_completion_tokens` (not `max_tokens`), accept
+// `reasoning_effort`, and only support the default temperature — so the request
+// body adapts. Detected from the deployment name (e.g. name it "gpt-5.5").
+const isGpt5Family = /gpt-5/i.test(AZURE_DEPLOYMENT);
 
-const BASE_SYSTEM_PROMPT = `You are an expert clinical-trial eSource builder. You read one or more uploaded study documents (Clinical Study Protocol, Schedule of Activities/Assessments (SOA), Laboratory/Pharmacy/Imaging manuals, Questionnaires, study guidelines, sponsor references) and produce a STRUCTURED, EDITABLE eSource STUDY MODEL — visits → forms → typed fields — driven by the Schedule of Activities. This is not a flat list of questions.
+// Shared context guidance reused by both build phases.
+const DOC_ROLES = `DOCUMENT ROLES — when multiple documents are provided, recognize what each is FOR:
+- The Clinical Study Protocol (the document containing the Schedule of Activities / Table of Procedures, objectives, eligibility, and visit timing) is the AUTHORITATIVE source for the VISIT SCHEDULE.
+- A "CRF Completion Requirements" / "EDC Completion Guidelines" data-entry guide describes how to FILL forms/fields (labels, formats, completion guidance). Use it to enrich field-level detail — NEVER to define the visit schedule, and never treat it as the primary protocol when a real protocol with an SOA is present.
+- When both are present, build visits from the protocol's SOA and layer field detail from the CRF guide where form names match.`;
 
-DOCUMENT ROLES — when multiple documents are provided, recognize what each is FOR:
-- The Clinical Study Protocol (the document that contains the Schedule of Activities / Table of Procedures, objectives, eligibility, and visit timing) is the AUTHORITATIVE source for the VISIT SCHEDULE. The visit list MUST come from this document's SOA.
-- A "CRF Completion Requirements", "EDC Completion Guidelines", or similar data-entry guide describes how to FILL forms/fields (field labels, formats, completion guidance). Use it ONLY to enrich field-level detail and completion guidance — NEVER use it to define the visit schedule, and NEVER treat it as the primary protocol when an actual protocol with an SOA is also present.
-- If you find an SOA in the protocol, the CRF/EDC guide does NOT override it. Build visits from the protocol's SOA, then layer in field detail from the CRF guide where the form names match.
+// ===== PHASE A — skeleton: the COMPLETE visit/log schedule + form NAMES only.
+// Output stays small (no fields), so the model can spend all its effort getting
+// the full SOA visit list right without risking output-token truncation. =====
+const SKELETON_SYSTEM_PROMPT = `You are an expert clinical-trial eSource builder. In THIS step you extract the STUDY STRUCTURE ONLY: study metadata, the COMPLETE visit/log schedule driven by the Schedule of Activities (SOA), and the NAMES of the forms collected at each visit. You do NOT produce fields in this step.
 
-WORKFLOW — follow in order:
-1. Identify the PRIMARY protocol among the documents — the one containing the Schedule of Activities and study design (NOT a CRF/EDC completion guide). Extract: study name, protocol number, phase, indication, sponsor, study objectives, and inclusion/exclusion criteria. Understand protocol structure even when formatting differs between studies.
-2. Locate the Schedule of Activities (SOA) table. It may be titled "Schedule of Activities", "Schedule of Assessments", "Schedule of Procedures/Assessments", "Schedule of Events", or appear as a numbered table (e.g. "Table 3"). This table is the AUTHORITATIVE source for visits — the column headers ARE the visits. Do not infer visits from prose or from your own expectations of a "typical" trial; read them directly off the SOA.
-   - IMPORTANT: the SOA is extracted from a PDF, so its grid is flattened to text and may look scrambled — a multi-row/rotated header where visit labels are split across lines (e.g. "Visit" then a row like "1 2 3 3 4 4 4 4 5 6 ..." with sub-labels "a b a b c d ..." on the next line, forming visits 1, 2, 3a, 3b, 4a, 4b, 4c, 4d, 5, 6, ...), a "Study Day(s)" row giving each visit's day, and "Study Phase" groupings (e.g. Screening, Baseline, Treatment, Follow-up). Carefully reconstruct the FULL ordered list of visit columns from these header rows, pairing each visit label with its study day. Treat sub-visits like "3a"/"3b" as distinct visits. Do NOT collapse the table into a few broad phases (e.g. do not output just "Treatment Period") — output each individual visit column.
-3. Extract EVERY patient visit/timepoint from the SOA, reading the column headers strictly LEFT-TO-RIGHT and reproducing them IN THAT EXACT ORDER. Critical rules for this step:
-   - Capture ALL columns, including the first and last. Do not drop, skip, merge, or deduplicate visits, and do not stop early. If the SOA has 14 visit columns, output 14 visits.
-   - Use the EXACT visit name/label printed in the SOA header (e.g. "Screening", "Baseline", "Day 1", "Week 2", "Week 4", "Week 8", "Week 12", "End of Treatment", "End of Study", "Follow-Up"). Do NOT renumber, relabel, round, or convert (e.g. never turn "Day 1" into "Week 1", never collapse "Week 4" and "Week 8" into one).
-   - Preserve every intermediate timepoint. If the SOA lists Week 2, 4, 8, 12, 16 you must emit ALL of them — do not output only some (this is the cause of visits appearing in "odd" or irregular numbers). Sequential numeric timepoints must be complete and monotonic.
-   - For each visit, capture its timing and window from the SOA header / footnotes (e.g. "Day -28 to -1", "±3 days").
-   - Continuous/unscheduled logs that span the whole study rather than a single column (Adverse Events, Concomitant Medications) are kind "log"; everything tied to a specific SOA column is kind "visit".
-   - Before moving on, re-count: the number of "visit" entries you emit MUST equal the number of scheduled visit columns in the SOA. If they differ, you missed columns — go back and read them all.
-4. Read the SOA cells: a marker ("X", "✓", "Required", "Optional", "Conditional") means that procedure/form is collected at that visit. Map each marked procedure to a FORM under that visit. A procedure marked across multiple visits produces a form under EACH of those visits.
-5. For each procedure/form, SEARCH the full protocol and supporting documents for the data-collection details and generate protocol-specific fields — never generic placeholders. (e.g. "Vital Signs" → Systolic BP, Diastolic BP, Heart Rate, Respiratory Rate, Temperature, Height, Weight, BMI; "Demographics" → Subject ID, Initials, Date of Birth, Age, Sex, Race, Ethnicity.)
-   - COMPLETENESS — each form is a COMPLETE eSource questionnaire, not a sample. When a CRF/EDC Completion Requirements guide (or the protocol) enumerates the fields of a form — often as numbered sub-items, e.g. "3.16.1 Category", "3.16.2 AE ID", … through "3.16.18 …" — emit EVERY one of those sub-items as its own field, using the exact field label and capturing its data-entry instruction in completionGuidance. Do NOT truncate, sample, deduplicate, or stop at a "typical" handful: a real CRF form commonly has 10-25+ fields, and AE / Concomitant Medication / Laboratory forms have even more. Capture every numbered field in the source.
-   - CONDITIONAL FIELDS — reproduce dependent/branching fields too (e.g. "If Yes, record First Study Identifier / First Site Identifier", "If serious, …", "If Other, specify") as their own fields, and state the triggering condition in completionGuidance. Add a matching "required-if" rule where appropriate.
-   - SECTIONS — organize each form's fields into logical, correctly named subsections via the "section" property, in source order, so the questionnaire renders as grouped sections rather than one flat list (e.g. Vital Signs → "Anthropometry": Height / Weight / BMI, then "Blood Pressure & Pulse": Systolic / Diastolic / Pulse; Adverse Events → "Event Details", "Seriousness", "Causality", "Action Taken & Outcome"). Fields collected together share the same section name; do not leave fields ungrouped when a form has more than ~5 fields.
-6. For every field, choose the best field type, add validation rules and required flags, and record full traceability.
+${DOC_ROLES}
 
-Your output MUST be valid JSON matching this EXACT structure:
+WORKFLOW:
+1. Identify the PRIMARY protocol (the one with the SOA). Extract study title, protocol number, phase, indication, sponsor, objectives, and inclusion/exclusion criteria.
+2. Locate the SOA table ("Schedule of Activities/Assessments/Procedures/Events", or a numbered table such as "Table 3"). Its column headers ARE the visits — read them directly off the table; never infer from prose or from a "typical" trial.
+   - The SOA is extracted from a PDF, so its grid is flattened and may look scrambled: a multi-row header where visit labels are split across lines (e.g. a "Visit" row "1 2 3 3 4 4 4 4 5 6 ..." with sub-labels "a b a b c d ..." beneath, forming 1, 2, 3a, 3b, 4a, 4b, 4c, 4d, 5, 6, ...), a "Study Day(s)" row giving each visit's day, and "Study Phase" groupings (Screening, Baseline, Treatment, Follow-up). Reconstruct the FULL ordered visit list, pairing each label with its study day. Treat sub-visits (3a/3b) as DISTINCT visits. Do NOT collapse into broad phases (never output just "Treatment Period").
+3. Output EVERY visit column LEFT-TO-RIGHT in exact order:
+   - Capture ALL columns including the first and last (incl. EOS, ET/EDD, Unscheduled). Do not drop, skip, merge, deduplicate, or stop early. If the SOA has 30 columns, output 30 visits.
+   - Use the EXACT label shown. Do not renumber, relabel, round, or convert (never turn "Day 1" into "Week 1").
+   - Capture each visit's timing and window from the header/footnotes (e.g. "Day -28", "±3 days").
+   - Continuous logs spanning the whole study (Adverse Events, Concomitant Medications, etc.) are kind "log"; everything tied to a specific SOA column is kind "visit".
+   - Re-count before finishing: the number of "visit" entries MUST equal the number of SOA visit columns. If they differ, you missed columns.
+4. For each visit, list the FORMS collected at it (by NAME only). Every procedure marked in that visit's column becomes a form. Use standard names where they match: Informed Consent, Demographics, Eligibility / Inclusion-Exclusion, Medical History, Vital Signs, Physical Examination, Laboratory, ECG, Concomitant Medications, Adverse Events, Pharmacokinetics, Questionnaires, Disposition / End of Study, etc.
+
+Output ONLY valid JSON (NO fields and NO rules in this step):
 {
   "studyTitle": "string",
   "studyDescription": "string (1-2 sentences)",
   "protocolNumber": "string or null",
   "sponsor": "string or null",
-  "phase": "string or null (e.g. 'Phase II')",
+  "phase": "string or null",
   "indication": "string or null",
-  "objectives": "string or null (primary/secondary objectives, brief)",
+  "objectives": "string or null",
   "visits": [
     {
       "id": "v1",
-      "name": "string (e.g. 'Screening', 'Baseline', 'Week 4', 'End of Study')",
+      "name": "string (exact SOA label)",
       "kind": "visit | log",
-      "timing": "string (e.g. 'Day -28 to -1', 'Week 4')",
-      "window": "string (e.g. '±3 days') or null",
+      "timing": "string or null",
+      "window": "string or null",
       "forms": [
-        {
-          "id": "f1",
-          "name": "string (e.g. 'Vital Signs', 'Adverse Events')",
-          "description": "string or null",
-          "appliedTemplate": "string or null (one of: 'Adverse Event Log','Concomitant Medication Log','Vital Signs','Medical History' when the form clearly matches, else null)",
-          "fields": [
-            {
-              "id": "fld1",
-              "label": "string",
-              "type": "text|textarea|number|integer|decimal|date|datetime|time|select|multiselect|radio|checkbox|yesno|signature|file|calculated",
-              "required": true,
-              "options": ["..."],
-              "section": "string or null — optional grouping within the form",
-              "expression": "string or null — only for type 'calculated' (e.g. 'weight / (height/100)^2')",
-              "confidence": "high|medium|low",
-              "completionGuidance": "string — plain instruction for site staff",
-              "source": "string — source document name",
-              "protocolSection": "string — e.g. '§6.1' (or null)",
-              "page": "number or null — page in the source document",
-              "originalText": "string — short verbatim snippet the field derives from (or null)"
-            }
-          ],
-          "rules": [
-            {
-              "id": "r1",
-              "description": "string — e.g. 'Systolic BP must be between 60 and 250 mmHg'",
-              "ruleType": "range|required-if|cross-field|format|date-not-future|within-visit-window",
-              "confidence": "high|medium|low"
-            }
-          ]
-        }
+        { "name": "string", "description": "string or null", "appliedTemplate": "Adverse Event Log | Concomitant Medication Log | Vital Signs | Medical History | null" }
       ]
     }
   ],
   "eligibility": [
-    {
-      "id": "e1",
-      "kind": "inclusion | exclusion",
-      "criterion": "string — original criterion text",
-      "logic": "string — suggested pass/fail logic in plain language",
-      "confidence": "high|medium|low"
-    }
+    { "id": "e1", "kind": "inclusion | exclusion", "criterion": "original text", "logic": "pass/fail logic", "confidence": "high|medium|low" }
   ],
   "findings": [
-    {
-      "id": "fnd1",
-      "title": "string — short title",
-      "description": "string — what the issue is",
-      "source": "string — e.g. 'Protocol §6.1 vs. Schedule of Activities'",
-      "confidence": "high|medium|low",
-      "severity": "info|warning|blocker",
-      "suggestedAction": "review | block"
-    }
+    { "id": "fnd1", "title": "string", "description": "string", "source": "string", "confidence": "high|medium|low", "severity": "info|warning|blocker", "suggestedAction": "review | block" }
   ]
 }
 
 Rules:
-- Model the study as VISITS/LOGS → FORMS → FIELDS, driven by the SOA. Scheduled timepoints are kind "visit"; continuous logs (AE, ConMed) are kind "log".
-- NEVER output an empty visit. Every visit/log in the "visits" array MUST contain at least one form with at least one field. Do NOT create a visit just because a timepoint (e.g. "Week 6") is mentioned somewhere in the text — only create a visit if you can actually populate it with the procedures/forms collected at it. Drop any timepoint you cannot populate. An empty "forms": [] array is invalid and must never appear.
-- IF AND ONLY IF a real Schedule of Activities table is present: the "visits" array (kind "visit") should contain one entry per scheduled visit COLUMN that has collected procedures, in the same left-to-right order, with the exact SOA labels — do not sample, summarize, reorder, rename, or cap to a round number, and map each marked procedure to a form under that visit.
-- IF NO Schedule of Activities table exists in ANY document (e.g. only a CRF/EDC Completion Requirements guide, a single manual, or prose is provided): build a best-effort visit schedule INFERRED from the visit/week/timepoint references found across the documents (e.g. Screening, Baseline, Day 1, Week 1, Week 2 … plus any follow-up). Aim for roughly the requested number of visits, name them as clinical visits with kind "visit" (never literally rename procedures), and CRUCIALLY populate EACH inferred visit with the forms and fields that the documents indicate are collected at it — every visit must have at least one form with fields. Distribute the described forms/fields across these visits sensibly rather than piling them all onto one visit. Also raise a "blocker" finding stating that no SOA table was found, so the inferred schedule should be reviewed. Never emit an empty inferred visit.
-- Generate the standard clinical forms when the protocol supports them: Informed Consent, Demographics, Eligibility, Medical History, Concomitant Medications, Adverse Events, Vital Signs, Physical Examination, Laboratory Results, ECG, Imaging, Questionnaires, End of Study.
-- SECTION COMPLETENESS: each visit's set of forms is the list of "sections" shown for that visit — it MUST be complete per the SOA: include every procedure marked at that visit as its own form, and make each form an EXHAUSTIVE questionnaire (every field the source defines for it), never a stub. Faithfully reproducing the source's enumerated fields always wins over inventing a generic subset. A form that the source describes with 18 fields must come back with ~18 fields, not 6.
-- QUESTIONNAIRE GROUPING: in every multi-part form, set the "section" property on fields so the form renders as titled subsections, each holding its detailed questions in source order. Keep section names consistent across fields that belong together.
-- Choose the most appropriate field type. Use 'integer'/'decimal' for numerics with the right precision, 'datetime' for date+time, 'multiselect' for pick-many, 'signature' for sign-offs (e.g. Informed Consent), 'file' for document uploads, 'calculated' for derived values (e.g. BMI, Age) and include an "expression".
-- Only include "options" for select/multiselect/radio/checkbox field types.
-- TRACEABILITY: every field MUST include source (document name), and where determinable protocolSection, page, and a short originalText snippet, plus a confidence. This ensures auditability.
-- Give EVERY field a completionGuidance. You MUST include at least 2-3 fields marked "low" confidence (inferred or ambiguous fields) so they get flagged for human review, plus several "medium" and the rest "high". A build with zero low-confidence fields is invalid.
-- Provide 1-2 suggested validation rules per form where sensible (plausible ranges, required-if logic, date-not-future for DOB, within-visit-window for visit dates).
-- Convert inclusion/exclusion criteria into eligibility items with pass/fail logic.
-- Produce 3-6 intelligence findings representing cross-document issues a reviewer should resolve before approving (e.g. a visit window that disagrees between protocol and SOA, a procedure marked in the SOA with no detail in the protocol, a missing expected form, an eligibility inconsistency). At least one should be a "blocker". These can be representative — they need not be exhaustively detected.
-- When multiple documents are provided, attribute fields/findings to the right source document and synthesize them into ONE study.
-- Return ONLY the JSON object. No markdown, no explanation.`;
+- The "visits" array MUST contain one entry per SOA visit COLUMN (kind "visit"), in left-to-right order, with the exact labels — do not sample, summarize, reorder, rename, or cap to a round number. This is the single most important requirement of this step.
+- Every visit MUST list at least one form name. Forms have NO fields in this step.
+- If NO SOA table exists in ANY document, infer a best-effort schedule (Screening, Baseline, Day 1, Week 1, Week 2, … plus follow-up) and add a "blocker" finding stating no SOA was found.
+- Convert inclusion/exclusion criteria into eligibility items with pass/fail logic. Produce 3-6 findings, at least one "blocker".
+- Return ONLY the JSON object. No markdown, no prose.`;
 
-function buildSystemPrompt(options: BuildOptions): string {
-  const o = { ...DEFAULT_OPTIONS, ...options };
-  const lines = [BASE_SYSTEM_PROMPT, '', 'Additional requirements:'];
-  lines.push(
-    `- When a Schedule of Activities table exists, it is authoritative for the number and order of visits — extract ALL of its populated columns even if that is far more than ${o.visitCount}. The ${o.visitCount} figure is only a loose upper guideline, NOT a target: never pad the output with empty or fabricated visits to reach it. If the documents contain no SOA, return only the few visits/logs you can actually populate with forms.`
-  );
-  if (o.detailLevel === 'concise') lines.push('- Keep field counts lean (the most important 4-6 fields per form), but still group them into sections.');
-  else if (o.detailLevel === 'detailed') lines.push('- Be EXHAUSTIVE: capture EVERY field the source documents define for each form — do NOT cap at a round number. Rich forms (Adverse Events, Laboratory, Concomitant Medications, ECG) commonly run 12-25+ fields; reproduce every enumerated sub-item with rich completionGuidance, and organize all fields into correctly named sections. Use fewer fields only when the source genuinely defines fewer.');
-  else lines.push('- Use a realistic field count that follows the source — typically 6-12 fields per form, more when the source enumerates more — grouped into sections.');
-  if (o.customInstructions.trim()) {
-    lines.push('', 'User custom instructions (follow closely):', o.customInstructions.trim());
-  }
-  return lines.join('\n');
+// ===== PHASE B — enrich ONE form into its complete, sectioned questionnaire.
+// Bounded output per call (one form), so detailed forms never truncate. =====
+const ENRICH_SYSTEM_PROMPT = `You are an expert clinical-trial eSource builder. Given source-document excerpts and ONE target form, produce the COMPLETE, detailed list of typed fields for that form — a real eSource questionnaire grouped into sections.
+
+${DOC_ROLES}
+
+For the TARGET FORM:
+- COMPLETENESS — search the excerpts (especially any CRF/EDC Completion Requirements guide) for this form and emit EVERY field it defines. When the guide enumerates fields as numbered sub-items (e.g. "3.16.1 Category", "3.16.2 AE ID", … through "3.16.18 …"), reproduce EACH as its own field with the exact label and its data-entry instruction in completionGuidance. Do NOT truncate, sample, or stop at a "typical" handful — rich forms (Adverse Events, Laboratory, Concomitant Medications, ECG) commonly run 12-25+ fields. Use fewer only when the source genuinely defines fewer.
+- CONDITIONAL FIELDS — reproduce dependent/branching fields ("If Yes, record …", "If abnormal, …", "If Other, specify") as their own fields, state the trigger in completionGuidance, and add a matching "required-if" rule.
+- SECTIONS — set the "section" property on every field to group the form into correctly named subsections, in source order (e.g. Vital Signs → "Anthropometry" then "Blood Pressure & Pulse"; Adverse Events → "Event Details", "Seriousness", "Causality", "Action & Outcome"). Do not leave fields ungrouped when the form has more than ~5 fields.
+- TYPES — choose the best field type (integer/decimal for numerics, datetime for date+time, multiselect for pick-many, signature for sign-offs, file for uploads, calculated with an "expression" for derived values like BMI/Age). Only include "options" for select/multiselect/radio/checkbox.
+- TRACEABILITY — every field includes source (document name), and where determinable protocolSection, page, a short originalText snippet, and a confidence. Include at least one or two "low"/"medium" confidence fields where the source is ambiguous.
+- Give EVERY field a completionGuidance. Provide 1-3 sensible validation rules for the form.
+
+Output ONLY valid JSON for THIS one form:
+{
+  "fields": [
+    {
+      "label": "string",
+      "type": "text|textarea|number|integer|decimal|date|datetime|time|select|multiselect|radio|checkbox|yesno|signature|file|calculated",
+      "required": true,
+      "options": ["..."],
+      "section": "string or null",
+      "expression": "string or null (only for 'calculated')",
+      "confidence": "high|medium|low",
+      "completionGuidance": "string",
+      "source": "string (source document name)",
+      "protocolSection": "string or null",
+      "page": "number or null",
+      "originalText": "string or null"
+    }
+  ],
+  "rules": [
+    { "description": "string", "ruleType": "range|required-if|cross-field|format|date-not-future|within-visit-window", "confidence": "high|medium|low" }
+  ]
+}
+Return ONLY the JSON object. No markdown, no prose.`;
+
+// Per-form field-count guidance, driven by the detailLevel option.
+function enrichDetailLine(o: Required<Omit<BuildOptions, 'customInstructions'>> & { customInstructions: string }): string {
+  if (o.detailLevel === 'concise') return 'Keep it lean: the most important 4-6 fields, still grouped into sections.';
+  if (o.detailLevel === 'detailed') return 'Be EXHAUSTIVE: emit every field the source defines for this form (12-25+ for rich forms), reproducing every enumerated sub-item, all grouped into sections.';
+  return 'Use a realistic field count that follows the source (typically 6-12, more when the source enumerates more), grouped into sections.';
 }
 
 // Raw shape returned by the model (before we attach review state / IDs).
@@ -179,44 +161,70 @@ interface RawForm extends Omit<StudyForm, 'fields' | 'rules'> {
   rules?: Array<Omit<StudyForm['rules'][number], 'accepted'>>;
 }
 
-// Source documents are split into chunks small enough that one chunk plus the
-// system prompt, running skeleton, and completion all fit within a 128k-token
-// context window. ~160k chars ≈ ~40k tokens, leaving ample room for output.
-const MAX_CHUNK_CHARS = 160000;
-// GPT-5-family models are reasoning models: max_completion_tokens is shared
-// between (hidden) reasoning tokens and the visible JSON output. A small budget
-// gets consumed by reasoning and truncates the JSON, so give a generous cap.
-// Exhaustive per-form questionnaires produce large JSON, so keep this high to
-// avoid finish_reason:"length" truncation on the single-call (small-doc) path.
-const MAX_OUTPUT_TOKENS = isGpt5Family ? 65536 : 16384;
+// gpt-4.1 and gpt-5 family accept very large inputs (hundreds of thousands of
+// tokens), so the whole corpus is passed in one call for the skeleton — the SOA
+// is never split across chunks. This bound is just a safety cap.
+const MAX_CONTEXT_CHARS = 1_000_000;
+// The skeleton call must fit the deployment's tokens-per-minute budget, so its
+// input is capped. The SOA table can sit deep in a long protocol, so the input
+// is assembled from the relevant regions (synopsis + SOA + eligibility) rather
+// than naively truncating the start. ~165k chars ≈ ~41k tokens.
+const SKELETON_MAX_CHARS = 165000;
+// Per-form enrichment only needs the slice of the documents around that form, so
+// each enrich call sends a focused excerpt rather than the whole corpus.
+const ENRICH_EXCERPT_CHARS = 16000;
+// Concurrency cap for the parallel per-form enrichment calls. Kept low so a
+// modest deployment TPM quota is not blown by many simultaneous calls.
+const ENRICH_CONCURRENCY = 2;
+// max_completion_tokens (gpt-5) / max_tokens (others). The skeleton (no fields)
+// and each single-form enrichment both stay well under these caps.
+const MAX_OUTPUT_TOKENS = isGpt5Family ? 65536 : 32768;
 
-// One chat-completion call that returns a parsed RawStudy JSON object.
-async function callModel(systemPrompt: string, userContent: string): Promise<RawStudy> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENAI_KEY}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-      ],
-      // GPT-5 family renamed the output-token cap, ignores custom temperature,
-      // and accepts reasoning_effort (none|low|medium|high|xhigh) — keep it low
-      // so the token budget is spent on the JSON output, not hidden reasoning.
-      ...(isGpt5Family
-        ? { max_completion_tokens: MAX_OUTPUT_TOKENS, reasoning_effort: 'low' }
-        : { max_tokens: MAX_OUTPUT_TOKENS, temperature: 0.3 }),
-      response_format: { type: 'json_object' },
-    }),
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+// One chat-completion call that returns the parsed JSON object the model emits.
+// Retries on 429/503 (Azure tokens-per-minute / requests-per-minute throttling),
+// honoring the Retry-After header when present, with exponential backoff.
+async function callModel(systemPrompt: string, userContent: string): Promise<any> {
+  const url = `${AZURE_ENDPOINT}/openai/deployments/${AZURE_DEPLOYMENT}/chat/completions?api-version=${AZURE_API_VERSION}`;
+  const requestBody = JSON.stringify({
+    // On Azure the model is selected by the deployment in the URL, not the body.
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ],
+    // GPT-5 family renamed the output-token cap, ignores custom temperature,
+    // and accepts reasoning_effort (none|low|medium|high|xhigh) — keep it low
+    // so the token budget is spent on the JSON output, not hidden reasoning.
+    ...(isGpt5Family
+      ? { max_completion_tokens: MAX_OUTPUT_TOKENS, reasoning_effort: 'low' }
+      : { max_tokens: MAX_OUTPUT_TOKENS, temperature: 0.3 }),
+    response_format: { type: 'json_object' },
   });
+
+  const MAX_RETRIES = 5;
+  let res!: Response;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': AZURE_API_KEY },
+      body: requestBody,
+    });
+    if (res.ok || (res.status !== 429 && res.status !== 503) || attempt >= MAX_RETRIES) break;
+    // Respect Retry-After (seconds) when Azure provides it; else exponential backoff.
+    const retryAfter = Number(res.headers.get('retry-after'));
+    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : Math.min(2000 * 2 ** attempt, 30000);
+    await sleep(waitMs);
+  }
 
   if (!res.ok) {
     const errBody = await res.text();
-    throw new Error(`OpenAI API error ${res.status}: ${errBody}`);
+    const hint = res.status === 429
+      ? ' — the deployment is throttling (tokens/requests-per-minute quota). Try again shortly or raise the deployment quota in Azure.'
+      : '';
+    throw new Error(`Azure OpenAI API error ${res.status}: ${errBody}${hint}`);
   }
 
   const data = (await res.json()) as {
@@ -228,119 +236,120 @@ async function callModel(systemPrompt: string, userContent: string): Promise<Raw
 
   if (!jsonText) {
     throw new Error(
-      `Model returned no content (finish_reason: ${choice?.finish_reason ?? 'unknown'}). ` +
-        `If this is "length", the output token limit was exhausted — reduce MAX_CHUNK_CHARS or raise MAX_OUTPUT_TOKENS.`
+      `Model returned no content (finish_reason: ${choice?.finish_reason ?? 'unknown'}).`
     );
   }
   if (choice?.finish_reason === 'length') {
-    throw new Error(
-      'Model response was truncated (finish_reason: length) before the JSON was complete. ' +
-        'Reduce MAX_CHUNK_CHARS so each part produces less output, or raise MAX_OUTPUT_TOKENS.'
-    );
+    throw new Error('Model response was truncated (finish_reason: length) before the JSON was complete.');
   }
 
   try {
-    return JSON.parse(jsonText) as RawStudy;
+    return JSON.parse(jsonText);
   } catch {
-    throw new Error('Model returned invalid/incomplete JSON. This usually means the response was truncated; try reducing MAX_CHUNK_CHARS.');
+    throw new Error('Model returned invalid/incomplete JSON (likely truncated).');
   }
-}
-
-// Split combined source text into context-sized chunks, preferring to break on
-// document, then page, then paragraph boundaries so tables (the SOA especially)
-// stay intact within a single chunk.
-function splitIntoChunks(text: string, maxChars: number): string[] {
-  if (text.length <= maxChars) return [text];
-  const segments = text.split(/(?=\n===== DOCUMENT)|(?=\n\[Page )|(?=\n\n)/);
-  const chunks: string[] = [];
-  let current = '';
-  for (const seg of segments) {
-    if (seg.length > maxChars) {
-      if (current) { chunks.push(current); current = ''; }
-      for (let i = 0; i < seg.length; i += maxChars) chunks.push(seg.slice(i, i + maxChars));
-      continue;
-    }
-    if (current.length + seg.length > maxChars) {
-      chunks.push(current);
-      current = seg;
-    } else {
-      current += seg;
-    }
-  }
-  if (current.trim()) chunks.push(current);
-  return chunks;
-}
-
-// Compact list of visits/forms extracted so far, given to later chunks so the
-// model reuses the same names and partial results merge cleanly.
-function skeletonSummary(acc: RawStudy): string {
-  const visits = (acc.visits ?? []).map(v => {
-    const forms = (v.forms ?? []).map(f => f.name).filter(Boolean).join(', ');
-    return `- ${v.name}${v.timing ? ` (${v.timing})` : ''}${forms ? ` → forms: ${forms}` : ''}`;
-  });
-  return visits.length ? visits.join('\n') : '(nothing extracted yet)';
 }
 
 const norm = (s?: string | null) => (s ?? '').trim().toLowerCase();
 
-// Merge a newly-returned partial study into the accumulator, deduplicating by
-// visit name, form name (within a visit), field label, eligibility criterion,
-// and finding title.
-function mergeRawStudies(a: RawStudy, b: RawStudy): RawStudy {
-  const out: RawStudy = {
-    studyTitle: a.studyTitle || b.studyTitle,
-    studyDescription: a.studyDescription || b.studyDescription,
-    protocolNumber: a.protocolNumber ?? b.protocolNumber,
-    sponsor: a.sponsor ?? b.sponsor,
-    phase: a.phase ?? b.phase,
-    indication: a.indication ?? b.indication,
-    objectives: a.objectives ?? b.objectives,
-    visits: [...(a.visits ?? [])],
-    eligibility: [...(a.eligibility ?? [])],
-    findings: [...(a.findings ?? [])],
-  };
+// The skeleton phase only needs the protocol (the SOA + eligibility + metadata),
+// not the CRF/EDC completion guide — so when extractText has tagged the
+// SOA-bearing document(s), send only those. This keeps the single big skeleton
+// call smaller (fewer tokens → less likely to hit the deployment's rate limit)
+// and more focused. Falls back to the full corpus when nothing is tagged.
+function soaDocsOnly(corpus: string): string {
+  const parts = corpus.split(/\n(?====== DOCUMENT \d+ of \d+:)/);
+  if (parts.length <= 1) return corpus;
+  const soa = parts.filter(p => /contains Schedule of Activities/i.test(p.split('\n', 1)[0] ?? ''));
+  return soa.length ? soa.join('\n') : corpus;
+}
 
-  for (const bv of b.visits ?? []) {
-    const existing = out.visits!.find(av => norm(av.name) === norm(bv.name));
-    if (!existing) { out.visits!.push(bv); continue; }
-    existing.timing = existing.timing || bv.timing;
-    existing.window = existing.window || bv.window;
-    existing.forms = existing.forms ?? [];
-    for (const bf of bv.forms ?? []) {
-      const ef = existing.forms.find(f => norm(f.name) === norm(bf.name));
-      if (!ef) { existing.forms.push(bf); continue; }
-      ef.description = ef.description || bf.description;
-      ef.appliedTemplate = ef.appliedTemplate || bf.appliedTemplate;
-      ef.fields = ef.fields ?? [];
-      const seenFields = new Set(ef.fields.map(x => norm(x.label)));
-      for (const fld of bf.fields ?? []) {
-        if (seenFields.has(norm(fld.label))) continue;
-        ef.fields.push(fld);
-        seenFields.add(norm(fld.label));
-      }
-      ef.rules = ef.rules ?? [];
-      const seenRules = new Set(ef.rules.map(x => norm(x.description)));
-      for (const r of bf.rules ?? []) {
-        if (seenRules.has(norm(r.description))) continue;
-        ef.rules.push(r);
-        seenRules.add(norm(r.description));
-      }
+// Assemble a focused, size-capped skeleton input from the protocol: the synopsis
+// (start), the Schedule of Activities table, and the eligibility criteria. A long
+// protocol can place the SOA past a naive truncation point, so each region is
+// located by anchor and a window around it is kept. Falls back to the whole doc
+// when it already fits.
+function skeletonInput(corpus: string): string {
+  const doc = soaDocsOnly(corpus);
+  if (doc.length <= SKELETON_MAX_CHARS) return doc;
+
+  const wide: RegExp[] = [
+    /schedule of (activities|assessments|procedures|events)/i,
+    /\bvisit\b[\s\S]{0,60}\bstudy\s*day/i,
+  ];
+  const narrow: RegExp[] = [/inclusion criteria/i, /exclusion criteria/i];
+
+  const windows: Array<[number, number]> = [[0, 45000]]; // title page + synopsis
+  for (const re of wide) {
+    const m = re.exec(doc);
+    if (m) windows.push([Math.max(0, m.index - 2000), Math.min(doc.length, m.index + 95000)]);
+  }
+  for (const re of narrow) {
+    const m = re.exec(doc);
+    if (m) windows.push([Math.max(0, m.index - 1000), Math.min(doc.length, m.index + 25000)]);
+  }
+
+  windows.sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const w of windows) {
+    const last = merged[merged.length - 1];
+    if (last && w[0] <= last[1]) last[1] = Math.max(last[1], w[1]);
+    else merged.push([w[0], w[1]]);
+  }
+  let out = '';
+  for (const [s, e] of merged) {
+    out += doc.slice(s, e) + '\n…\n';
+    if (out.length >= SKELETON_MAX_CHARS) break;
+  }
+  return out.slice(0, SKELETON_MAX_CHARS);
+}
+
+// Run an async fn over items with bounded concurrency, preserving input order.
+async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i]);
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
-  const seenElig = new Set((out.eligibility ?? []).map(e => norm(e.criterion)));
-  for (const e of b.eligibility ?? []) {
-    if (seenElig.has(norm(e.criterion))) continue;
-    out.eligibility!.push(e);
-    seenElig.add(norm(e.criterion));
+// Build a focused excerpt of the corpus around mentions of a form name, so each
+// enrichment call sends only the relevant slice rather than the whole document.
+function excerptFor(corpus: string, formName: string, maxChars = ENRICH_EXCERPT_CHARS): string {
+  const hay = corpus.toLowerCase();
+  const needle = norm(formName);
+  if (!needle) return corpus.slice(0, maxChars);
+
+  const windows: Array<[number, number]> = [];
+  let from = 0;
+  while (windows.length < 4) {
+    const idx = hay.indexOf(needle, from);
+    if (idx === -1) break;
+    windows.push([Math.max(0, idx - 1500), Math.min(corpus.length, idx + 6500)]);
+    from = idx + needle.length;
   }
-  const seenFind = new Set((out.findings ?? []).map(f => norm(f.title)));
-  for (const f of b.findings ?? []) {
-    if (seenFind.has(norm(f.title))) continue;
-    out.findings!.push(f);
-    seenFind.add(norm(f.title));
+  if (!windows.length) return corpus.slice(0, maxChars);
+
+  // Merge overlapping windows, then concatenate up to the char budget.
+  windows.sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const w of windows) {
+    const last = merged[merged.length - 1];
+    if (last && w[0] <= last[1]) last[1] = Math.max(last[1], w[1]);
+    else merged.push([w[0], w[1]]);
   }
-  return out;
+  let out = '';
+  for (const [s, e] of merged) {
+    out += corpus.slice(s, e) + '\n…\n';
+    if (out.length >= maxChars) break;
+  }
+  return out.slice(0, maxChars);
 }
 
 export async function buildStudyFromDocuments(
@@ -348,38 +357,55 @@ export async function buildStudyFromDocuments(
   documents: IngestedDocument[],
   options: BuildOptions = {}
 ): Promise<StudyModel> {
-  const systemPrompt = buildSystemPrompt(options);
-  const chunks = splitIntoChunks(protocolText, MAX_CHUNK_CHARS);
+  const o = { ...DEFAULT_OPTIONS, ...options };
+  const corpus = protocolText.length > MAX_CONTEXT_CHARS ? protocolText.slice(0, MAX_CONTEXT_CHARS) : protocolText;
+  const customLine = o.customInstructions.trim()
+    ? `\n\nUser custom instructions (follow closely):\n${o.customInstructions.trim()}`
+    : '';
 
-  // Small inputs: a single call is enough.
-  if (chunks.length === 1) {
-    const raw = await callModel(
-      systemPrompt,
-      `Build a structured eSource study from the following source document(s):\n\n${chunks[0]}`
-    );
-    return normalizeStudy(raw, documents);
+  // ---- Phase A: extract the COMPLETE visit/log schedule + form names (one call,
+  // full corpus, small output). This is where the full SOA is read. ----
+  const skeleton = (await callModel(
+    SKELETON_SYSTEM_PROMPT + customLine,
+    `Extract the study structure — the COMPLETE visit/log schedule from the SOA, plus the form names collected at each visit — from the following source document(s):\n\n${skeletonInput(corpus)}`
+  )) as RawStudy;
+
+  const visits = skeleton.visits ?? [];
+
+  // ---- Phase B: enrich each UNIQUE form name once (parallel, bounded output per
+  // call), then attach the resulting fields to every visit that has that form. ----
+  const uniqueForms = new Map<string, RawForm>();
+  for (const v of visits)
+    for (const f of v.forms ?? []) {
+      const key = norm(f.name);
+      if (key && !uniqueForms.has(key)) uniqueForms.set(key, f);
+    }
+
+  const detailLine = enrichDetailLine(o);
+  const enriched = await mapPool([...uniqueForms.values()], ENRICH_CONCURRENCY, async (form) => {
+    const user =
+      `STUDY: ${skeleton.studyTitle ?? ''}${skeleton.indication ? ` — ${skeleton.indication}` : ''}. ${detailLine}\n` +
+      `TARGET FORM: "${form.name}"${form.description ? ` — ${form.description}` : ''}.${customLine}\n\n` +
+      `Build the complete, sectioned field list for THIS form only, using the document excerpts below.\n\n` +
+      `===== SOURCE EXCERPTS =====\n${excerptFor(corpus, form.name)}`;
+    try {
+      const r = await callModel(ENRICH_SYSTEM_PROMPT, user);
+      return { key: norm(form.name), fields: r.fields ?? [], rules: r.rules ?? [] };
+    } catch {
+      // A failed form simply comes back empty and is dropped by normalizeStudy.
+      return { key: norm(form.name), fields: [] as RawForm['fields'], rules: [] as RawForm['rules'] };
+    }
+  });
+  const byForm = new Map(enriched.map((e) => [e.key, e]));
+
+  for (const v of visits) {
+    v.forms = (v.forms ?? []).map((f) => {
+      const e = byForm.get(norm(f.name));
+      return e ? { ...f, fields: e.fields, rules: e.rules } : f;
+    });
   }
 
-  // Large inputs: process the FIRST chunk on its own to establish the visit
-  // skeleton (the SOA-bearing document is sorted first), then process the
-  // remaining chunks IN PARALLEL sharing that skeleton. This collapses N
-  // sequential round-trips into two waves, which is dramatically faster, while
-  // still letting later chunks reuse the protocol's visit/form names.
-  const buildPrompt = (i: number, skeleton: string) =>
-    `You are building ONE eSource study from documents split into ${chunks.length} parts. This is PART ${i + 1} of ${chunks.length}.\n\n` +
-    `STRUCTURE EXTRACTED FROM OTHER PARTS — reuse these visit and form names EXACTLY when this part refers to the same thing, so results merge cleanly. Only add a new visit if this part reveals a genuinely new SOA timepoint:\n${skeleton}\n\n` +
-    `From the PART ${i + 1} text below, return the study JSON: add any NEW visits/forms/fields found here and ENRICH existing forms with the fields/rules this part describes (prefer attaching forms to existing visit names over creating duplicates). Capture study metadata, eligibility, and findings whenever this part contains them. Be concise — keep this single response well within the output limit; remaining detail will come from other parts.\n\n` +
-    `===== PART ${i + 1} TEXT =====\n${chunks[i]}`;
-
-  let acc = await callModel(systemPrompt, buildPrompt(0, '(nothing extracted yet)'));
-  const skeleton = skeletonSummary(acc);
-
-  const rest = await Promise.all(
-    chunks.slice(1).map((_, idx) => callModel(systemPrompt, buildPrompt(idx + 1, skeleton)))
-  );
-  for (const partial of rest) acc = mergeRawStudies(acc, partial);
-
-  return normalizeStudy(acc, documents);
+  return normalizeStudy(skeleton, documents);
 }
 
 // Attach review state, fill defaults, and guarantee stable IDs.

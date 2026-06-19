@@ -1,19 +1,120 @@
 @import "tailwindcss";
 
+:root {
+  --ink-900: #0b1220;
+  --ink-800: #101a2e;
+  --ink-700: #1e293b;
+  --slate-600: #475569;
+  --slate-500: #64748b;
+  --slate-400: #94a3b8;
+  --line: #e7ebf1;
+  --surface: #ffffff;
+  --surface-2: #f7f9fc;
+  --brand: #f26a1b;
+  --brand-600: #ea5e0b;
+  --brand-100: #fdecdf;
+  --accent: #2563eb;
+  --accent-100: #e8f0fe;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.07), 0 2px 6px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 18px 40px rgba(15, 23, 42, 0.12), 0 6px 14px rgba(15, 23, 42, 0.08);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #f1f5f9;
-  color: #1e293b;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--ink-700);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Soft, brand-tinted depth instead of a flat grey fill. */
+  background:
+    radial-gradient(1100px 620px at 88% -12%, #e9eefb 0%, rgba(233, 238, 251, 0) 55%),
+    radial-gradient(820px 520px at -6% 2%, #fdeadb 0%, rgba(253, 234, 219, 0) 52%),
+    linear-gradient(180deg, #f7f9fd 0%, #eef1f7 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
 #root {
   min-height: 100vh;
   width: 100%;
+}
+
+::selection {
+  background: rgba(242, 106, 27, 0.18);
+}
+
+/* Quieter, modern scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #ccd5e1;
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #b4bdcc;
+  background-clip: padding-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+button {
+  font-family: inherit;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes floatIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+.float-in {
+  animation: floatIn 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Page (tab) transition, form switch, and staggered row reveals. */
+.anim-page { animation: fadeSlideUp 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.anim-form { animation: fadeSlideUp 0.34s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.anim-row { animation: fadeSlideUp 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+/* Interactive transitions. */
+.tab-btn { transition: color 0.15s ease, border-color 0.15s ease; }
+.form-tab { transition: background 0.15s ease, transform 0.12s ease; }
+.form-tab:hover { background: #eef2f8 !important; }
+.lift { transition: transform 0.12s ease, box-shadow 0.2s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+.lift:hover { transform: translateY(-1px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .float-in, .anim-page, .anim-form, .anim-row { animation: none; }
+  .lift:hover { transform: none; }
 }

@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
-  Check, X, Pencil, ChevronRight, FlaskConical, CircleDot, ListChecks, Plus,
-  PenLine, Upload,
+  Check, X, Pencil, FlaskConical, ListChecks, Plus,
+  PenLine, Upload, FileText, CircleDot,
 } from 'lucide-react';
 import type {
-  StudyModel, StudyField, StudyVisit, StudyForm, ReviewStatus,
+  StudyModel, StudyField, StudyForm, ReviewStatus,
 } from '../types/study';
 import { ConfidenceBadge, TypeBadge, Pill } from './ui';
 import EligibilityPanel from './EligibilityPanel';
@@ -46,7 +46,15 @@ type Tab = 'build' | 'eligibility' | 'intelligence' | 'export';
 export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderProps) {
   const [tab, setTab] = useState<Tab>('build');
   const [activeVisitId, setActiveVisitId] = useState(study.visits[0]?.id ?? '');
+  const [activeFormId, setActiveFormId] = useState(study.visits[0]?.forms[0]?.id ?? '');
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+
+  // Reset the form panel's scroll to the top whenever the form/visit/tab changes,
+  // so a freshly-selected form starts at its first question.
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [activeFormId, activeVisitId, tab]);
 
   // ---- Derived counts ----
   const stats = useMemo(() => {
@@ -117,6 +125,9 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
   const openAdd = (formId: string) => setEditTarget({ formId, field: blankField(), isNew: true });
 
   const activeVisit = study.visits.find(v => v.id === activeVisitId) ?? study.visits[0];
+  // Active form within the selected visit; falls back to the first form so a
+  // visit change automatically lands on that visit's first form.
+  const activeForm = activeVisit?.forms.find(f => f.id === activeFormId) ?? activeVisit?.forms[0];
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'build', label: 'Study Build', icon: <Layers size={15} /> },
@@ -126,12 +137,15 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
   ];
 
   return (
-    <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+    <div style={{ maxWidth: '100%', margin: '0 auto' }}>
       {/* Study header */}
       <div style={{
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #334155 100%)',
-        borderRadius: '20px 20px 0 0', padding: '26px 32px', color: '#fff',
+        background:
+          'radial-gradient(640px 300px at 93% -35%, rgba(242,106,27,0.32) 0%, rgba(242,106,27,0) 62%),' +
+          'linear-gradient(135deg, #0b1220 0%, #15233c 55%, #25364f 100%)',
+        borderRadius: '22px 22px 0 0', padding: '28px 32px', color: '#fff',
         position: 'relative', overflow: 'hidden',
+        boxShadow: '0 1px 0 rgba(255,255,255,0.08) inset',
       }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
           <div style={{ flex: 1 }}>
@@ -151,7 +165,7 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
               <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">{study.documents.length} source doc{study.documents.length !== 1 ? 's' : ''}</Pill>
             </div>
           </div>
-          <button onClick={onReset} style={{
+          <button onClick={onReset} className="lift" style={{
             display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
             borderRadius: 9, border: '1px solid rgba(255,255,255,0.2)',
             background: 'rgba(255,255,255,0.06)', color: '#e2e8f0',
@@ -187,7 +201,7 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
         display: 'flex', padding: '0 20px', gap: 4,
       }}>
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
+          <button key={t.id} className="tab-btn" onClick={() => setTab(t.id)} style={{
             display: 'flex', alignItems: 'center', gap: 7,
             padding: '14px 16px', border: 'none', background: 'none', cursor: 'pointer',
             fontSize: 13.5, fontWeight: 600,
@@ -207,56 +221,104 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
         ))}
       </div>
 
-      {/* Body */}
-      <div style={{
-        background: '#fff', borderRadius: '0 0 20px 20px',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.06)', minHeight: 420,
+      {/* Body — keyed by tab so each page switch replays the enter animation */}
+      <div key={tab} className="anim-page" style={{
+        background: '#fff', borderRadius: '0 0 22px 22px',
+        boxShadow: '0 18px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.06)',
+        border: '1px solid #eaeef4', borderTop: 'none', minHeight: 420,
       }}>
         {tab === 'build' && (
-          <div style={{ display: 'flex', minHeight: 420 }}>
-            {/* Visit sidebar */}
+          <div>
+            {/* Visit selector — visits live in a dropdown, not the side menu */}
             <div style={{
-              width: 248, flexShrink: 0, borderRight: '1px solid #e2e8f0',
-              padding: '16px 12px', background: '#fafbfc',
+              display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+              padding: '16px 28px', borderBottom: '1px solid #e2e8f0', background: '#fafbfc',
             }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase', padding: '0 8px', marginBottom: 10 }}>
-                Visits & Logs
-              </p>
-              {study.visits.map(v => {
-                const fieldCount = v.forms.reduce((a, f) => a + f.fields.length, 0);
-                const active = v.id === activeVisit?.id;
-                return (
-                  <button key={v.id} onClick={() => setActiveVisitId(v.id)} style={{
-                    width: '100%', textAlign: 'left', padding: '10px 12px', marginBottom: 4,
-                    borderRadius: 9, border: 'none', cursor: 'pointer',
-                    background: active ? '#eff6ff' : 'transparent',
-                    display: 'flex', alignItems: 'center', gap: 9,
-                  }}>
-                    <span style={{ color: active ? '#2563eb' : '#94a3b8', flexShrink: 0 }}>
-                      {v.kind === 'log' ? <CircleDot size={15} /> : <ChevronRight size={15} />}
-                    </span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: active ? '#2563eb' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {v.name}
-                      </span>
-                      <span style={{ display: 'block', fontSize: 11, color: '#94a3b8' }}>
-                        {v.timing ? `${v.timing} · ` : ''}{v.forms.length} form{v.forms.length !== 1 ? 's' : ''} · {fieldCount} fields
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
+              <label htmlFor="visit-select" style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                Visit
+              </label>
+              <select
+                id="visit-select"
+                value={activeVisit?.id ?? ''}
+                onChange={e => { setActiveVisitId(e.target.value); setActiveFormId(''); }}
+                style={{
+                  padding: '9px 32px 9px 12px', borderRadius: 9, border: '1.5px solid #cbd5e1',
+                  background: '#fff', fontSize: 14, fontWeight: 600, color: '#1e293b',
+                  fontFamily: 'inherit', cursor: 'pointer', minWidth: 280, maxWidth: '100%',
+                }}
+              >
+                {study.visits.map(v => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}{v.timing ? ` — ${v.timing}` : ''}{v.kind === 'log' ? ' (log)' : ''}
+                  </option>
+                ))}
+              </select>
+              {activeVisit && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <Pill>{activeVisit.kind === 'log' ? 'Continuous log' : 'Scheduled visit'}</Pill>
+                  {activeVisit.window && <Pill bg="#eff6ff" color="#2563eb">Window {activeVisit.window}</Pill>}
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                    {activeVisit.forms.length} form{activeVisit.forms.length !== 1 ? 's' : ''} · {activeVisit.forms.reduce((a, f) => a + f.fields.length, 0)} fields
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* Forms + fields */}
-            <div style={{ flex: 1, padding: '22px 28px', minWidth: 0 }}>
-              {activeVisit && <VisitDetail
-                visit={activeVisit}
-                onField={mutateField}
-                onRule={setRuleAccepted}
-                onEditField={openEdit}
-                onAddField={openAdd}
-              />}
+            <div style={{ display: 'flex', minHeight: 420 }}>
+              {/* Forms side menu — the selected visit's form titles */}
+              <div style={{
+                width: 248, flexShrink: 0, borderRight: '1px solid #e2e8f0',
+                padding: '16px 12px', background: '#fafbfc',
+                maxHeight: 'calc(100vh - 120px)', overflowY: 'auto',
+              }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase', padding: '0 8px', marginBottom: 10 }}>
+                  Forms
+                </p>
+                {(activeVisit?.forms ?? []).map(f => {
+                  const active = f.id === activeForm?.id;
+                  return (
+                    <button key={f.id} className="form-tab" onClick={() => setActiveFormId(f.id)} style={{
+                      width: '100%', textAlign: 'left', padding: '10px 12px', marginBottom: 4,
+                      borderRadius: 9, border: 'none', cursor: 'pointer',
+                      background: active ? '#eff6ff' : 'transparent',
+                      display: 'flex', alignItems: 'center', gap: 9,
+                    }}>
+                      <span style={{ color: active ? '#2563eb' : '#94a3b8', flexShrink: 0 }}>
+                        {f.appliedTemplate ? <CircleDot size={15} /> : <FileText size={15} />}
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: active ? '#2563eb' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {f.name}
+                        </span>
+                        <span style={{ display: 'block', fontSize: 11, color: '#94a3b8' }}>
+                          {f.fields.length} field{f.fields.length !== 1 ? 's' : ''}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Active form — its headings (sections) and questions.
+                  Keyed by form id so switching forms replays the enter animation. */}
+              <div ref={contentRef} style={{
+                flex: 1, padding: '22px 28px', minWidth: 0,
+                maxHeight: 'calc(100vh - 120px)', overflowY: 'auto',
+              }}>
+                <div key={activeForm?.id ?? 'none'} className="anim-form">
+                  {activeForm ? (
+                    <FormBlock
+                      form={activeForm}
+                      onField={mutateField}
+                      onRule={setRuleAccepted}
+                      onEditField={openEdit}
+                      onAddField={openAdd}
+                    />
+                  ) : (
+                    <p style={{ color: '#94a3b8', fontSize: 13 }}>This visit has no forms.</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -293,33 +355,6 @@ function CounterChip({ label, value, color }: { label: string; value: number; co
     }}>
       <span style={{ fontSize: 17, fontWeight: 800, color }}>{value}</span>
       <span style={{ fontSize: 11.5, color: '#94a3b8' }}>{label}</span>
-    </div>
-  );
-}
-
-// ---- Visit detail: forms with fields + rules ----
-function VisitDetail({ visit, onField, onRule, onEditField, onAddField }: {
-  visit: StudyVisit;
-  onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
-  onRule: (formId: string, ruleId: string, accepted: boolean) => void;
-  onEditField: (formId: string, field: StudyField) => void;
-  onAddField: (formId: string) => void;
-}) {
-  return (
-    <div>
-      <div style={{ marginBottom: 18 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>{visit.name}</h2>
-        <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-          <Pill>{visit.kind === 'log' ? 'Continuous log' : 'Scheduled visit'}</Pill>
-          {visit.timing && <Pill bg="#eff6ff" color="#2563eb">{visit.timing}</Pill>}
-          {visit.window && <Pill bg="#eff6ff" color="#2563eb">Window {visit.window}</Pill>}
-        </div>
-      </div>
-
-      {visit.forms.map(form => (
-        <FormBlock key={form.id} form={form} onField={onField} onRule={onRule}
-          onEditField={onEditField} onAddField={onAddField} />
-      ))}
     </div>
   );
 }
@@ -365,8 +400,8 @@ function FormBlock({ form, onField, onRule, onEditField, onAddField }: {
       </div>
 
       <div>
-        {groupFieldsBySection(form.fields).map(group => (
-          <div key={group.key}>
+        {groupFieldsBySection(form.fields).map((group, gi) => (
+          <div key={group.key} className="anim-row" style={{ animationDelay: `${Math.min(gi * 55, 280)}ms` }}>
             {group.section && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
@@ -605,7 +640,7 @@ function SmallBtn({ children, onClick, active, activeBg, activeFg }: {
   active: boolean; activeBg?: string; activeFg?: string;
 }) {
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} className="lift" style={{
       display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'center',
       padding: '6px 11px', borderRadius: 7, cursor: 'pointer',
       border: `1px solid ${active ? (activeFg ?? '#2563eb') + '40' : '#e2e8f0'}`,

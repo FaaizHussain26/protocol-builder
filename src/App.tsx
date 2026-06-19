@@ -15,7 +15,7 @@ import { DEMO_STUDY } from './utils/demoStudy';
 
 type Step = 'upload' | 'processing' | 'build';
 
-const CONFIGURED = !!import.meta.env.VITE_OPENAI_API_KEY;
+const CONFIGURED = !!import.meta.env.VITE_AZURE_OPENAI_API_KEY && !!import.meta.env.VITE_AZURE_OPENAI_ENDPOINT;
 const MAX_FILES = 5;
 const DEMO_MODE = typeof window !== 'undefined' && window.location.hash === '#demo';
 
@@ -44,7 +44,7 @@ export default function App() {
   };
 
   const handleBuild = async () => {
-    if (!CONFIGURED) { setError('OpenAI API key is not configured. Check your .env file.'); return; }
+    if (!CONFIGURED) { setError('Azure OpenAI is not configured. Set VITE_AZURE_OPENAI_API_KEY and VITE_AZURE_OPENAI_ENDPOINT in your .env file.'); return; }
     if (files.length === 0) { setError('Please upload at least one source document.'); return; }
     setError(null);
     setStep('processing');
@@ -101,26 +101,31 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9' }}>
+    <div style={{ minHeight: '100vh', background: 'transparent' }}>
       {/* Top Nav */}
       <nav style={{
-        background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 32px', height: 60,
+        background: 'rgba(255,255,255,0.72)', borderBottom: '1px solid rgba(226,232,240,0.8)',
+        backdropFilter: 'blur(14px) saturate(140%)', WebkitBackdropFilter: 'blur(14px) saturate(140%)',
+        padding: '0 32px', height: 64,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100,
+        boxShadow: '0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 20px rgba(15,23,42,0.04)',
+        position: 'sticky', top: 0, zIndex: 100,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            width: 34, height: 34, borderRadius: 10,
-            background: 'linear-gradient(135deg, #0f172a, #f26a1b)',
+            width: 38, height: 38, borderRadius: 11,
+            background: 'linear-gradient(140deg, #0f172a 0%, #1e293b 45%, #f26a1b 130%)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 16px rgba(242,106,27,0.28), 0 1px 0 rgba(255,255,255,0.25) inset',
           }}>
-            <Layers size={18} color="#fff" />
+            <Layers size={19} color="#fff" />
           </div>
-          <div>
-            <span style={{ fontWeight: 700, fontSize: 16, color: '#1e293b' }}>eSource Builder</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <span style={{ fontWeight: 800, fontSize: 16.5, color: '#0f172a', letterSpacing: -0.3 }}>eSource Builder</span>
             <span style={{
-              marginLeft: 8, fontSize: 11, fontWeight: 600, padding: '2px 8px',
-              borderRadius: 20, background: '#fdf1e8', color: '#f26a1b',
+              fontSize: 10.5, fontWeight: 700, padding: '3px 9px', letterSpacing: 0.3,
+              borderRadius: 20, background: '#fdf1e8', color: '#ea5e0b',
+              border: '1px solid #fbdcc4', textTransform: 'uppercase',
             }}>Protocol Builder</span>
           </div>
         </div>
@@ -130,27 +135,37 @@ export default function App() {
               <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>AI Connected</span></>
           ) : (
             <><Shield size={14} color="#64748b" />
-              <span style={{ fontSize: 12, color: '#64748b' }}>Powered by OpenAI</span></>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Powered by Azure OpenAI</span></>
           )}
         </div>
       </nav>
 
-      <main style={{ maxWidth: 1080, margin: '0 auto', padding: '40px 24px' }}>
+      <main style={
+        step === 'build'
+          ? { maxWidth: 1600, margin: '0 auto', padding: '28px 32px 64px' }
+          : { maxWidth: 1080, margin: '0 auto', padding: '40px 24px' }
+      }>
         {step === 'upload' && (
           <>
             {/* Hero */}
-            <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            <div className="float-in" style={{ textAlign: 'center', marginBottom: 40 }}>
               <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '6px 14px', borderRadius: 20, background: '#fdf1e8', marginBottom: 16,
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '6px 14px 6px 10px', borderRadius: 20,
+                background: 'rgba(255,255,255,0.7)', border: '1px solid #fbdcc4',
+                boxShadow: '0 2px 10px rgba(242,106,27,0.10)', marginBottom: 20,
               }}>
                 <Sparkles size={14} color="#f26a1b" />
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#f26a1b' }}>AI-Native eSource Build Pipeline</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#c2410c', letterSpacing: 0.2 }}>AI-Native eSource Build Pipeline</span>
               </div>
-              <h1 style={{ fontSize: 36, fontWeight: 800, color: '#0f172a', marginBottom: 14, letterSpacing: -1 }}>
-                Documents in.<br /><span style={{ color: '#2563eb' }}>An approved structured build out.</span>
+              <h1 style={{ fontSize: 44, fontWeight: 800, color: '#0b1220', marginBottom: 16, letterSpacing: -1.4, lineHeight: 1.1 }}>
+                Documents in.<br />
+                <span style={{
+                  background: 'linear-gradient(100deg, #f26a1b 0%, #fb923c 55%, #f59e0b 100%)',
+                  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+                }}>An approved structured build out.</span>
               </h1>
-              <p style={{ fontSize: 16, color: '#64748b', maxWidth: 600, margin: '0 auto', lineHeight: 1.65 }}>
+              <p style={{ fontSize: 16.5, color: '#52617a', maxWidth: 620, margin: '0 auto', lineHeight: 1.65 }}>
                 Upload your protocol and supporting source documents. The AI reads across all of them and
                 builds one structured study — visits, forms, and typed fields — that a reviewer can correct and approve.
               </p>
@@ -167,13 +182,14 @@ export default function App() {
               ].map(({ icon, text }, i) => (
                 <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '7px 14px', borderRadius: 24, background: '#fff',
-                    border: '1px solid #e2e8f0', fontSize: 13, fontWeight: 500, color: '#475569',
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    padding: '8px 15px', borderRadius: 24, background: 'rgba(255,255,255,0.85)',
+                    border: '1px solid rgba(226,232,240,0.9)', fontSize: 13, fontWeight: 600, color: '#334155',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.05)',
                   }}>
-                    <span style={{ color: '#2563eb' }}>{icon}</span> {text}
+                    <span style={{ color: i === 1 ? '#f26a1b' : '#2563eb', display: 'inline-flex' }}>{icon}</span> {text}
                   </div>
-                  {i < 4 && <span style={{ color: '#cbd5e1', fontSize: 16 }}>→</span>}
+                  {i < 4 && <span style={{ color: '#cbd5e1', fontSize: 15 }}>→</span>}
                 </div>
               ))}
             </div>
@@ -192,9 +208,10 @@ export default function App() {
             <OptionsPanel options={options} onChange={setOptions} />
 
             <div style={{
-              background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.07)', overflow: 'hidden',
+              background: '#fff', borderRadius: 22, border: '1px solid #eaeef4',
+              boxShadow: '0 18px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.06)', overflow: 'hidden',
             }}>
+              <div style={{ height: 4, background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 35%, #f26a1b 100%)' }} />
               <div style={{ padding: '28px 32px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                   <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>Upload Source Documents</p>
@@ -214,11 +231,12 @@ export default function App() {
 
                 <button onClick={handleBuild} disabled={files.length === 0} style={{
                   width: '100%', marginTop: 20, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', gap: 8, padding: '14px', borderRadius: 12, border: 'none',
-                  background: files.length === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                  color: '#fff', fontSize: 15, fontWeight: 700,
+                  justifyContent: 'center', gap: 9, padding: '15px', borderRadius: 13, border: 'none',
+                  background: files.length === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #fb8c3b 0%, #f26a1b 55%, #ea5e0b 100%)',
+                  color: '#fff', fontSize: 15, fontWeight: 700, letterSpacing: 0.1,
                   cursor: files.length === 0 ? 'not-allowed' : 'pointer',
-                  boxShadow: files.length === 0 ? 'none' : '0 4px 14px rgba(37,99,235,0.35)',
+                  boxShadow: files.length === 0 ? 'none' : '0 10px 22px rgba(234,94,11,0.32), 0 1px 0 rgba(255,255,255,0.3) inset',
+                  transition: 'transform 0.12s ease, box-shadow 0.2s ease',
                 }}>
                   <Sparkles size={17} />
                   Build Structured Study{files.length > 1 ? ` from ${files.length} documents` : ''}
