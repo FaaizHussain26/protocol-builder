@@ -207,6 +207,8 @@ export interface TemplateQuestion {
   options?: string[];
   /** True when user-created (persisted to the question library). */
   custom?: boolean;
+  /** Yes/No answer for boolean rule-style questions. Defaults to "yes". */
+  answer?: 'yes' | 'no';
 }
 
 export interface Template {

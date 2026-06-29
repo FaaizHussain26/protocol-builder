@@ -49,7 +49,32 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
     setDraft((d) => {
       if (!d) return d;
       const cur = d.preferences.questions ?? [];
-      const next = cur.some((x) => x.id === q.id) ? cur.filter((x) => x.id !== q.id) : [...cur, q];
+      const next = cur.some((x) => x.id === q.id) ? cur.filter((x) => x.id !== q.id) : [...cur, { ...q }];
+      return { ...d, preferences: { ...d.preferences, questions: next } };
+    });
+
+  // Current Yes/No answer for a question (selected override → predefined default → "yes").
+  const answerOf = (q: TemplateQuestion): 'yes' | 'no' =>
+    selectedQuestions.find((x) => x.id === q.id)?.answer ?? q.answer ?? 'yes';
+
+  // Set a Yes/No answer; auto-selects the question if not already selected.
+  const setQuestionAnswer = (q: TemplateQuestion, answer: 'yes' | 'no') =>
+    setDraft((d) => {
+      if (!d) return d;
+      const cur = d.preferences.questions ?? [];
+      const next = cur.some((x) => x.id === q.id)
+        ? cur.map((x) => (x.id === q.id ? { ...x, answer } : x))
+        : [...cur, { ...q, answer }];
+      return { ...d, preferences: { ...d.preferences, questions: next } };
+    });
+
+  // Select or clear every question in a group at once.
+  const setGroupSelected = (list: TemplateQuestion[], on: boolean) =>
+    setDraft((d) => {
+      if (!d) return d;
+      const ids = new Set(list.map((q) => q.id));
+      const cur = (d.preferences.questions ?? []).filter((x) => !ids.has(x.id));
+      const next = on ? [...cur, ...list.map((q) => ({ ...q }))] : cur;
       return { ...d, preferences: { ...d.preferences, questions: next } };
     });
 
@@ -128,6 +153,14 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
     ['questions', `Questions${selectedQuestions.length ? ` (${selectedQuestions.length})` : ''}`],
     ['prompt', 'Prompt'],
   ] as const;
+
+  // Predefined questions grouped by their group label (in definition order),
+  // followed by the persisted Custom library.
+  const predefinedGroupNames = Array.from(new Set(PREDEFINED_QUESTIONS.map((q) => q.group)));
+  const questionGroups: { name: string; list: TemplateQuestion[] }[] = [
+    ...predefinedGroupNames.map((name) => ({ name, list: PREDEFINED_QUESTIONS.filter((q) => q.group === name) })),
+    { name: 'Custom', list: customQuestions },
+  ];
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '48px 20px' }}>
@@ -244,32 +277,58 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
           ) : editorTab === 'questions' ? (
             <div>
               <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
-                Select questions/preferences to feed into the build prompt. Custom questions you add are saved and reappear next time.
+                Select questions/rules to feed into the build prompt and set each Yes/No answer. The Universal Rules apply by default;
+                set one to <b>No</b> to disable it for this template. Custom questions you add are saved and reappear next time.
               </p>
-              {[
-                { name: 'Standard eSource (Visit)', list: PREDEFINED_QUESTIONS.filter((q) => q.group === 'Standard eSource (Visit)') },
-                { name: 'Client preferences (Visit)', list: PREDEFINED_QUESTIONS.filter((q) => q.group === 'Client preferences (Visit)') },
-                { name: 'Custom', list: customQuestions },
-              ].map((grp) => (
-                <div key={grp.name} style={{ marginBottom: 14 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 6 }}>{grp.name}</p>
-                  {grp.name === 'Custom' && grp.list.length === 0 && (
-                    <p style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', marginBottom: 6 }}>No custom questions yet — add one below.</p>
-                  )}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 4 }}>
-                    {grp.list.map((q) => (
-                      <label key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 8, cursor: 'pointer', background: isSelected(q.id) ? '#eff6ff' : 'transparent', border: `1px solid ${isSelected(q.id) ? '#bfdbfe' : 'transparent'}` }}>
-                        <input type="checkbox" checked={isSelected(q.id)} onChange={() => toggleQuestion(q)} style={{ accentColor: '#2563eb' }} />
-                        <span style={{ flex: 1, fontSize: 13, color: '#1e293b' }}>{q.text}</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '2px 7px', borderRadius: 10, whiteSpace: 'nowrap' }}>{answerTypeLabel(q)}</span>
-                        {q.custom && (
-                          <span role="button" onClick={(e) => { e.preventDefault(); q.id && removeCustomQuestion(q.id); }} style={{ color: '#cbd5e1', cursor: 'pointer', display: 'inline-flex' }} aria-label="Delete question"><Trash2 size={13} /></span>
-                        )}
-                      </label>
-                    ))}
+              {questionGroups.map((grp) => {
+                const selectedCount = grp.list.filter((q) => isSelected(q.id)).length;
+                return (
+                  <div key={grp.name} style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', letterSpacing: 0.3, textTransform: 'uppercase' }}>{grp.name}</p>
+                      {grp.list.length > 0 && (
+                        <span style={{ fontSize: 10.5, color: '#94a3b8' }}>{selectedCount}/{grp.list.length}</span>
+                      )}
+                      {grp.name !== 'Custom' && grp.list.length > 0 && (
+                        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                          <button onClick={() => setGroupSelected(grp.list, true)} style={miniBtn}>Select all</button>
+                          <button onClick={() => setGroupSelected(grp.list, false)} style={miniBtn}>Clear</button>
+                        </div>
+                      )}
+                    </div>
+                    {grp.name === 'Custom' && grp.list.length === 0 && (
+                      <p style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', marginBottom: 6 }}>No custom questions yet — add one below.</p>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 4 }}>
+                      {grp.list.map((q) => (
+                        <label key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 8, cursor: 'pointer', background: isSelected(q.id) ? '#eff6ff' : 'transparent', border: `1px solid ${isSelected(q.id) ? '#bfdbfe' : 'transparent'}` }}>
+                          <input type="checkbox" checked={isSelected(q.id)} onChange={() => toggleQuestion(q)} style={{ accentColor: '#2563eb' }} />
+                          <span style={{ flex: 1, fontSize: 13, color: '#1e293b' }}>{q.text}</span>
+                          {q.answerType === 'yesno' ? (
+                            <span style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                              {(['yes', 'no'] as const).map((val) => {
+                                const active = answerOf(q) === val && isSelected(q.id);
+                                return (
+                                  <span key={val} role="button" onClick={(e) => { e.preventDefault(); setQuestionAnswer(q, val); }} style={{
+                                    padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                                    background: active ? (val === 'yes' ? '#16a34a' : '#dc2626') : '#fff',
+                                    color: active ? '#fff' : '#94a3b8',
+                                  }}>{val === 'yes' ? 'Yes' : 'No'}</span>
+                                );
+                              })}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '2px 7px', borderRadius: 10, whiteSpace: 'nowrap' }}>{answerTypeLabel(q)}</span>
+                          )}
+                          {q.custom && (
+                            <span role="button" onClick={(e) => { e.preventDefault(); if (q.id) removeCustomQuestion(q.id); }} style={{ color: '#cbd5e1', cursor: 'pointer', display: 'inline-flex' }} aria-label="Delete question"><Trash2 size={13} /></span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               <div style={{ display: 'flex', gap: 8, marginTop: 4, position: 'sticky', bottom: 0, background: '#fff', paddingTop: 8 }}>
                 <input
@@ -325,6 +384,7 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
 
 const iconBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer', flexShrink: 0 };
 const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', borderRadius: 9, border: '1.5px solid #cbd5e1', fontSize: 13.5, color: '#1e293b', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' };
+const miniBtn: React.CSSProperties = { padding: '2px 8px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 10.5, fontWeight: 600, cursor: 'pointer' };
 
 const ANSWER_TYPES: { value: QuestionAnswerType; label: string }[] = [
   { value: 'yesno', label: 'Yes/No' },

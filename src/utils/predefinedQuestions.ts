@@ -1,4 +1,5 @@
 import type { TemplateQuestion } from '../types/study';
+import { UNIVERSAL_QUESTIONS } from './universalRules';
 
 // Static "Plan Mode" questions every site/company starts from.
 const STD = 'Standard eSource (Visit)';
@@ -30,4 +31,13 @@ export const PREFERENCE_VISIT_QUESTIONS: TemplateQuestion[] = [
   { id: 'pref-reschedule', text: 'Allow visit rescheduling / unscheduling?', answerType: 'preference', group: PREF },
 ];
 
-export const PREDEFINED_QUESTIONS: TemplateQuestion[] = [...STANDARD_VISIT_QUESTIONS, ...PREFERENCE_VISIT_QUESTIONS];
+// Universal eSource rules from "Universal Rules across all the sites" — grouped
+// Yes/No questions fed into the build prompt (the server also applies these per
+// form by default; selecting/answering here lets a template override them).
+export { UNIVERSAL_QUESTIONS } from './universalRules';
+
+export const PREDEFINED_QUESTIONS: TemplateQuestion[] = [
+  ...STANDARD_VISIT_QUESTIONS,
+  ...PREFERENCE_VISIT_QUESTIONS,
+  ...UNIVERSAL_QUESTIONS,
+];
