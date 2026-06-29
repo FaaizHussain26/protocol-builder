@@ -63,17 +63,43 @@ async function req<T>(path: string, init?: RequestInit, retries = 3): Promise<T>
 }
 
 // ---- Build pipeline ----
+// The build runs for minutes (skeleton + many per-form enrichment calls), longer
+// than a hosting proxy keeps a connection open. So the server returns a job id
+// immediately and we poll for the result — each request stays short-lived.
+type BuildStatus = { status: 'pending' | 'done' | 'error'; study?: StudyModel; error?: string };
+
+const BUILD_POLL_MS = 3000;
+const BUILD_MAX_WAIT_MS = 20 * 60 * 1000; // give up after 20 minutes
+const BUILD_MAX_POLL_FAILS = 6; // tolerate transient status-poll failures
+
 export async function buildStudyFromDocuments(
   protocolText: string,
   documents: IngestedDocument[],
   options: BuildOptions = {},
   templatePreferences?: TemplatePreferences,
 ): Promise<StudyModel> {
-  const { study } = await req<{ study: StudyModel }>('/api/build', {
+  const { jobId } = await req<{ jobId: string }>('/api/build', {
     method: 'POST',
     body: JSON.stringify({ protocolText, documents, options, templatePreferences }),
   });
-  return study;
+
+  const start = Date.now();
+  let fails = 0;
+  for (;;) {
+    await sleep(BUILD_POLL_MS);
+    let s: BuildStatus;
+    try {
+      s = await req<BuildStatus>(`/api/build/status/${jobId}`, {}, 0);
+      fails = 0;
+    } catch (e) {
+      // A transient blip on a status poll shouldn't abandon a build in progress.
+      if (++fails >= BUILD_MAX_POLL_FAILS) throw e;
+      continue;
+    }
+    if (s.status === 'done' && s.study) return s.study;
+    if (s.status === 'error') throw new Error(s.error || 'Build failed on the server.');
+    if (Date.now() - start > BUILD_MAX_WAIT_MS) throw new Error('Build timed out. Please try again.');
+  }
 }
 
 export interface RegenerateFormArgs {
