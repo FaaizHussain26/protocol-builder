@@ -1,51 +1,51 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Sparkles, Shield, AlertCircle, Loader, CheckCircle2,
-  FileText, Layers, AlertTriangle, FileOutput,
+  FileText, Layers, AlertTriangle, FileOutput, FolderOpen, SlidersHorizontal,
 } from 'lucide-react';
-import FileUpload from './components/FileUpload';
+import DocumentUploadBox from './components/DocumentUploadBox';
 import OptionsPanel from './components/OptionsPanel';
 import StudyBuilder from './components/StudyBuilder';
+import StudyLibrary from './components/StudyLibrary';
+import TemplateManager from './components/TemplateManager';
 import { extractTextFromFiles } from './utils/extractText';
-import { buildStudyFromDocuments } from './utils/claude';
-import type { BuildOptions } from './utils/claude';
-import type { StudyModel, IngestedDocument } from './types/study';
-import { detectDocType, fileKey, type DocType } from './utils/docTypes';
+import { buildStudyFromDocuments, listTemplates } from './utils/api';
+import type { BuildOptions } from './utils/api';
+import type { StudyModel, IngestedDocument, Template } from './types/study';
 import { DEMO_STUDY } from './utils/demoStudy';
 
 type Step = 'upload' | 'processing' | 'build';
 
-const CONFIGURED = !!import.meta.env.VITE_AZURE_OPENAI_API_KEY && !!import.meta.env.VITE_AZURE_OPENAI_ENDPOINT;
-const MAX_FILES = 5;
+const CONFIGURED = !!import.meta.env.VITE_API_BASE_URL;
 const DEMO_MODE = typeof window !== 'undefined' && window.location.hash === '#demo';
 
 export default function App() {
   const [step, setStep] = useState<Step>(DEMO_MODE ? 'build' : 'upload');
-  const [files, setFiles] = useState<File[]>([]);
-  const [docTypes, setDocTypes] = useState<Record<string, DocType>>({});
+  const [protocolFiles, setProtocolFiles] = useState<File[]>([]);
+  const [ecrfFiles, setEcrfFiles] = useState<File[]>([]);
   const [options, setOptions] = useState<BuildOptions>({});
   const [study, setStudy] = useState<StudyModel | null>(DEMO_MODE ? DEMO_STUDY : null);
+  const [currentStudyId, setCurrentStudyId] = useState<string | undefined>(undefined);
+  const [corpusText, setCorpusText] = useState('');
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [ingestIndex, setIngestIndex] = useState(0);
   const [stageMsg, setStageMsg] = useState('');
 
-  const handleFilesChange = (next: File[]) => {
-    setFiles(next);
-    // Auto-detect doc types for newly added files.
-    setDocTypes(prev => {
-      const updated = { ...prev };
-      for (const f of next) {
-        const k = fileKey(f);
-        if (!updated[k]) updated[k] = detectDocType(f.name);
-      }
-      return updated;
-    });
-  };
+  // Load saved templates (when a backend is configured) for the build options.
+  const loadTemplates = () => { if (CONFIGURED) listTemplates().then(setTemplates).catch(() => {}); };
+  useEffect(loadTemplates, []);
+
+  // Protocol leads the corpus (it carries the SOA); the eCRF enriches fields.
+  const allFiles = [...protocolFiles, ...ecrfFiles];
+  const docTypeOf = (f: File): string => (protocolFiles.includes(f) ? 'Protocol' : 'eCRF');
 
   const handleBuild = async () => {
-    if (!CONFIGURED) { setError('Azure OpenAI is not configured. Set VITE_AZURE_OPENAI_API_KEY and VITE_AZURE_OPENAI_ENDPOINT in your .env file.'); return; }
-    if (files.length === 0) { setError('Please upload at least one source document.'); return; }
+    if (!CONFIGURED) { setError('Backend API is not configured. Set VITE_API_BASE_URL in your .env file and start the server.'); return; }
+    if (protocolFiles.length === 0) { setError('Please upload at least the Protocol document.'); return; }
     setError(null);
     setStep('processing');
     setProgress(8);
@@ -54,35 +54,33 @@ export default function App() {
       // Ingestion: walk each document so the user sees them being read.
       const documents: IngestedDocument[] = [];
       setStageMsg('Ingesting source documents...');
-      for (let i = 0; i < files.length; i++) {
+      for (let i = 0; i < allFiles.length; i++) {
         setIngestIndex(i);
-        const f = files[i];
-        documents.push({
-          name: f.name,
-          docType: docTypes[fileKey(f)] ?? detectDocType(f.name),
-          sizeBytes: f.size,
-        });
-        setProgress(8 + Math.round(((i + 1) / files.length) * 32));
+        const f = allFiles[i];
+        documents.push({ name: f.name, docType: docTypeOf(f), sizeBytes: f.size });
+        setProgress(8 + Math.round(((i + 1) / allFiles.length) * 32));
         await new Promise(r => setTimeout(r, 280));
       }
-      setIngestIndex(files.length);
+      setIngestIndex(allFiles.length);
 
       setStageMsg('Reading document contents...');
-      const text = await extractTextFromFiles(files);
+      const text = await extractTextFromFiles(allFiles);
       if (text.trim().length < 100) {
         throw new Error('The document(s) appear to be empty or could not be read. Please try different files.');
       }
+      setCorpusText(text);
       setProgress(52);
 
       setStageMsg('AI is building the structured study (visits → forms → fields)...');
-      await new Promise(r => setTimeout(r, 300));
-      const built = await buildStudyFromDocuments(text, documents, options);
+      const prefs = templates.find(t => t.id === options.templateId)?.preferences;
+      const built = await buildStudyFromDocuments(text, documents, options, prefs);
       setProgress(92);
 
       setStageMsg('Assembling review workspace...');
       await new Promise(r => setTimeout(r, 400));
 
       setStudy(built);
+      setCurrentStudyId(undefined); // a fresh, unsaved build
       setStep('build');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
@@ -95,9 +93,19 @@ export default function App() {
 
   const handleReset = () => {
     setStudy(null);
-    setFiles([]);
-    setDocTypes({});
+    setCurrentStudyId(undefined);
+    setCorpusText('');
+    setProtocolFiles([]);
+    setEcrfFiles([]);
     setStep('upload');
+  };
+
+  const handleOpenSaved = (s: StudyModel, id: string) => {
+    setStudy(s);
+    setCurrentStudyId(id);
+    setCorpusText(''); // saved studies don't carry the original corpus
+    setLibraryOpen(false);
+    setStep('build');
   };
 
   return (
@@ -129,16 +137,41 @@ export default function App() {
             }}>Protocol Builder</span>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {CONFIGURED && (
+            <>
+              <button onClick={() => setTemplatesOpen(true)} className="lift" style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 9,
+                border: '1px solid #e2e8f0', background: '#fff', color: '#334155',
+                fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+              }}>
+                <SlidersHorizontal size={14} color="#2563eb" /> Preferences Templates
+              </button>
+              <button onClick={() => setLibraryOpen(true)} className="lift" style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 9,
+                border: '1px solid #e2e8f0', background: '#fff', color: '#334155',
+                fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+              }}>
+                <FolderOpen size={14} color="#2563eb" /> My Saved E-Sources
+              </button>
+            </>
+          )}
           {CONFIGURED ? (
-            <><CheckCircle2 size={14} color="#16a34a" />
-              <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>AI Connected</span></>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <CheckCircle2 size={14} color="#16a34a" />
+              <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>API Connected</span>
+            </span>
           ) : (
-            <><Shield size={14} color="#64748b" />
-              <span style={{ fontSize: 12, color: '#64748b' }}>Powered by Azure OpenAI</span></>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Shield size={14} color="#64748b" />
+              <span style={{ fontSize: 12, color: '#64748b' }}>Backend not configured</span>
+            </span>
           )}
         </div>
       </nav>
+
+      <StudyLibrary open={libraryOpen} onClose={() => setLibraryOpen(false)} onOpen={handleOpenSaved} />
+      <TemplateManager open={templatesOpen} onClose={() => setTemplatesOpen(false)} onChanged={loadTemplates} />
 
       <main style={
         step === 'build'
@@ -205,7 +238,7 @@ export default function App() {
               </div>
             )}
 
-            <OptionsPanel options={options} onChange={setOptions} />
+            <OptionsPanel options={options} onChange={setOptions} templates={templates} />
 
             <div style={{
               background: '#fff', borderRadius: 22, border: '1px solid #eaeef4',
@@ -213,33 +246,43 @@ export default function App() {
             }}>
               <div style={{ height: 4, background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 35%, #f26a1b 100%)' }} />
               <div style={{ padding: '28px 32px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>Upload Source Documents</p>
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>{files.length}/{MAX_FILES} files</span>
+                <div style={{ marginBottom: 16 }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginBottom: 4 }}>Study Documents</p>
+                  <p style={{ fontSize: 12.5, color: '#94a3b8', lineHeight: 1.5 }}>
+                    The <strong style={{ color: '#475569' }}>Protocol</strong> drives the visit schedule (its Schedule of Activities table + footnotes).
+                    The <strong style={{ color: '#475569' }}>eCRF / Completion Guide</strong> supplies the exact forms and fields.
+                  </p>
                 </div>
-                <p style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 16 }}>
-                  Protocol, schedule of assessments, lab/imaging manuals, eligibility worksheets, sponsor references.
-                </p>
-                <FileUpload
-                  files={files}
-                  onFilesChange={handleFilesChange}
-                  isProcessing={false}
-                  maxFiles={MAX_FILES}
-                  docTypes={docTypes}
-                  onDocTypeChange={(k, t) => setDocTypes(p => ({ ...p, [k]: t }))}
-                />
 
-                <button onClick={handleBuild} disabled={files.length === 0} style={{
-                  width: '100%', marginTop: 20, display: 'flex', alignItems: 'center',
+                <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  <DocumentUploadBox
+                    label="Protocol"
+                    required
+                    hint="Clinical study protocol containing the Schedule of Activities."
+                    files={protocolFiles}
+                    onFilesChange={setProtocolFiles}
+                    accent="#2563eb"
+                  />
+                  <DocumentUploadBox
+                    label="eCRF / Completion Guide"
+                    hint="eCRF or CRF completion requirements (recommended for full field detail)."
+                    files={ecrfFiles}
+                    onFilesChange={setEcrfFiles}
+                    accent="#f26a1b"
+                  />
+                </div>
+
+                <button onClick={handleBuild} disabled={protocolFiles.length === 0} style={{
+                  width: '100%', marginTop: 22, display: 'flex', alignItems: 'center',
                   justifyContent: 'center', gap: 9, padding: '15px', borderRadius: 13, border: 'none',
-                  background: files.length === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #fb8c3b 0%, #f26a1b 55%, #ea5e0b 100%)',
+                  background: protocolFiles.length === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #fb8c3b 0%, #f26a1b 55%, #ea5e0b 100%)',
                   color: '#fff', fontSize: 15, fontWeight: 700, letterSpacing: 0.1,
-                  cursor: files.length === 0 ? 'not-allowed' : 'pointer',
-                  boxShadow: files.length === 0 ? 'none' : '0 10px 22px rgba(234,94,11,0.32), 0 1px 0 rgba(255,255,255,0.3) inset',
+                  cursor: protocolFiles.length === 0 ? 'not-allowed' : 'pointer',
+                  boxShadow: protocolFiles.length === 0 ? 'none' : '0 10px 22px rgba(234,94,11,0.32), 0 1px 0 rgba(255,255,255,0.3) inset',
                   transition: 'transform 0.12s ease, box-shadow 0.2s ease',
                 }}>
                   <Sparkles size={17} />
-                  Build Structured Study{files.length > 1 ? ` from ${files.length} documents` : ''}
+                  Build Structured eSource{allFiles.length > 1 ? ` from ${allFiles.length} documents` : ''}
                 </button>
               </div>
             </div>
@@ -283,11 +326,11 @@ export default function App() {
 
             {/* Ingestion checklist */}
             <div style={{ width: 380, maxWidth: '100%', marginBottom: 24 }}>
-              {files.map((f, i) => {
+              {allFiles.map((f, i) => {
                 const done = i < ingestIndex;
                 const active = i === ingestIndex;
                 return (
-                  <div key={fileKey(f)} style={{
+                  <div key={`${f.name}-${i}`} style={{
                     display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
                     borderRadius: 9, marginBottom: 6,
                     background: done ? '#f0fdf4' : active ? '#eff6ff' : '#f8fafc',
@@ -301,7 +344,7 @@ export default function App() {
                     <span style={{ flex: 1, textAlign: 'left', fontSize: 13, fontWeight: 500, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {f.name}
                     </span>
-                    <span style={{ fontSize: 11, color: '#94a3b8' }}>{docTypes[fileKey(f)]}</span>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>{docTypeOf(f)}</span>
                   </div>
                 );
               })}
@@ -318,7 +361,14 @@ export default function App() {
         )}
 
         {step === 'build' && study && (
-          <StudyBuilder study={study} setStudy={setStudy} onReset={handleReset} />
+          <StudyBuilder
+            study={study}
+            setStudy={setStudy}
+            onReset={handleReset}
+            studyId={currentStudyId}
+            protocolText={corpusText}
+            onStudyIdChange={setCurrentStudyId}
+          />
         )}
       </main>
 

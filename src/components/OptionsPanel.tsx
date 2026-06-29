@@ -1,22 +1,18 @@
 import { useState } from 'react';
 import { Settings2, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
-import type { BuildOptions } from '../utils/claude';
-import { DEFAULT_OPTIONS } from '../utils/claude';
+import type { BuildOptions } from '../utils/api';
+import { DEFAULT_OPTIONS } from '../utils/api';
+import type { Template } from '../types/study';
 
 interface OptionsPanelProps {
   options: BuildOptions;
   onChange: (options: BuildOptions) => void;
   disabled?: boolean;
+  templates?: Template[];
 }
 
-const DETAIL_LEVELS: { value: NonNullable<BuildOptions['detailLevel']>; label: string }[] = [
-  { value: 'concise', label: 'Concise' },
-  { value: 'standard', label: 'Standard' },
-  { value: 'detailed', label: 'Detailed' },
-];
-
-export default function OptionsPanel({ options, onChange, disabled }: OptionsPanelProps) {
-  const [open, setOpen] = useState(false);
+export default function OptionsPanel({ options, onChange, disabled, templates = [] }: OptionsPanelProps) {
+  const [open, setOpen] = useState(true);
   const o = { ...DEFAULT_OPTIONS, ...options };
 
   const update = (patch: Partial<BuildOptions>) => onChange({ ...options, ...patch });
@@ -45,7 +41,7 @@ export default function OptionsPanel({ options, onChange, disabled }: OptionsPan
         <div style={{ flex: 1 }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Customize the Build</p>
           <p style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>
-            {open ? 'Adjust how the AI builds your structured study' : 'Prompt and detail level'}
+            {open ? 'Adjust how the AI builds your structured eSource' : 'Prompt and preferences template'}
           </p>
         </div>
         {open ? <ChevronUp size={18} color="#94a3b8" /> : <ChevronDown size={18} color="#94a3b8" />}
@@ -54,22 +50,23 @@ export default function OptionsPanel({ options, onChange, disabled }: OptionsPan
       {open && (
         <div style={{ padding: '20px 24px', borderTop: '1px solid #f1f5f9' }}>
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Detail level</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {DETAIL_LEVELS.map(level => (
-                <button key={level.value} type="button" disabled={disabled}
-                  onClick={() => update({ detailLevel: level.value })}
-                  style={{
-                    flex: 1, padding: '9px 0', borderRadius: 9,
-                    border: `1.5px solid ${o.detailLevel === level.value ? '#2563eb' : '#e2e8f0'}`,
-                    background: o.detailLevel === level.value ? '#eff6ff' : '#fff',
-                    color: o.detailLevel === level.value ? '#2563eb' : '#64748b',
-                    fontSize: 13, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
-                  }}>
-                  {level.label}
-                </button>
-              ))}
-            </div>
+            <label style={labelStyle}>Preferences template</label>
+            <select
+              value={options.templateId ?? ''}
+              disabled={disabled}
+              onChange={e => update({ templateId: e.target.value || undefined })}
+              style={{
+                width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid #e2e8f0',
+                background: '#fff', fontSize: 13.5, color: '#1e293b', fontFamily: 'inherit',
+                cursor: disabled ? 'not-allowed' : 'pointer', outline: 'none',
+              }}
+            >
+              <option value="">No template (defaults)</option>
+              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 6 }}>
+              Applies date/time format, signature, alerts, Screening order, General Sections, and prompt instructions. Manage these from “Preferences Templates” in the top bar.
+            </p>
           </div>
 
           <div style={{ marginBottom: 16 }}>

@@ -1,6 +1,7 @@
 // Supported source document roles for multi-document ingestion.
 export const DOC_TYPES = [
   'Protocol',
+  'eCRF',
   'Schedule of Assessments',
   'Lab Manual',
   'Imaging Manual',

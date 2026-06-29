@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
   Check, X, Pencil, FlaskConical, ListChecks, Plus,
-  PenLine, Upload, FileText, CircleDot,
+  PenLine, Upload, FileText, CircleDot, Save, Trash2, RefreshCw,
 } from 'lucide-react';
 import type {
-  StudyModel, StudyField, StudyForm, ReviewStatus,
+  StudyModel, StudyField, StudyForm, StudyVisit, ReviewStatus,
 } from '../types/study';
+import { regenerateForm, saveStudy } from '../utils/api';
+import { ALL_STANDARD_NAMES, canonicalRank } from '../utils/standardForms';
 import { ConfidenceBadge, TypeBadge, Pill } from './ui';
 import EligibilityPanel from './EligibilityPanel';
 import FindingsPanel from './FindingsPanel';
@@ -35,19 +37,46 @@ function blankField(): StudyField {
   };
 }
 
+let newFormCounter = 0;
+function blankForm(): StudyForm {
+  newFormCounter += 1;
+  return { id: `new-form-${Date.now()}-${newFormCounter}`, name: 'New Form', appliedTemplate: null, fields: [], rules: [] };
+}
+
+let newVisitCounter = 0;
+function blankVisit(): StudyVisit {
+  newVisitCounter += 1;
+  return { id: `new-visit-${Date.now()}-${newVisitCounter}`, name: 'New Visit', kind: 'visit', forms: [] };
+}
+
+const visitCtlBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  width: 32, height: 32, borderRadius: 8, border: '1px solid #e2e8f0',
+  background: '#fff', color: '#64748b', cursor: 'pointer', flexShrink: 0,
+};
+
 interface StudyBuilderProps {
   study: StudyModel;
   setStudy: (s: StudyModel) => void;
   onReset: () => void;
+  /** Persisted study id (set once saved). */
+  studyId?: string;
+  /** Extracted source corpus, used to regenerate individual forms. */
+  protocolText?: string;
+  /** Called with the new id after a first save. */
+  onStudyIdChange?: (id: string) => void;
 }
 
 type Tab = 'build' | 'eligibility' | 'intelligence' | 'export';
 
-export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderProps) {
+export default function StudyBuilder({ study, setStudy, onReset, studyId, protocolText, onStudyIdChange }: StudyBuilderProps) {
   const [tab, setTab] = useState<Tab>('build');
   const [activeVisitId, setActiveVisitId] = useState(study.visits[0]?.id ?? '');
   const [activeFormId, setActiveFormId] = useState(study.visits[0]?.forms[0]?.id ?? '');
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  const [regenId, setRegenId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   // Reset the form panel's scroll to the top whenever the form/visit/tab changes,
   // so a freshly-selected form starts at its first question.
@@ -124,6 +153,70 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
   const openEdit = (formId: string, field: StudyField) => setEditTarget({ formId, field, isNew: false });
   const openAdd = (formId: string) => setEditTarget({ formId, field: blankField(), isNew: true });
 
+  // ---- Visit & form structure mutations ----
+  const addVisit = () => {
+    const v = blankVisit();
+    setStudy({ ...study, visits: [...study.visits, v] });
+    setActiveVisitId(v.id);
+    setActiveFormId('');
+  };
+  const removeVisit = (visitId: string) => {
+    const visits = study.visits.filter(v => v.id !== visitId);
+    setStudy({ ...study, visits });
+    if (activeVisitId === visitId) { setActiveVisitId(visits[0]?.id ?? ''); setActiveFormId(''); }
+  };
+  const renameVisit = (visitId: string, name: string) =>
+    setStudy({ ...study, visits: study.visits.map(v => v.id !== visitId ? v : { ...v, name }) });
+
+  const addForm = (visitId: string, name?: string) => {
+    const f = { ...blankForm(), name: name || 'New Form' };
+    setStudy({ ...study, visits: study.visits.map(v => v.id !== visitId ? v : { ...v, forms: [...v.forms, f] }) });
+    setActiveFormId(f.id);
+  };
+  const sortFormsStandard = (visitId: string) =>
+    setStudy({ ...study, visits: study.visits.map(v => v.id !== visitId ? v : { ...v, forms: [...v.forms].sort((a, b) => canonicalRank(a.name) - canonicalRank(b.name)) }) });
+  const removeForm = (visitId: string, formId: string) =>
+    setStudy({ ...study, visits: study.visits.map(v => v.id !== visitId ? v : { ...v, forms: v.forms.filter(f => f.id !== formId) }) });
+  const updateForm = (formId: string, patch: Partial<StudyForm>) =>
+    setStudy({ ...study, visits: study.visits.map(v => ({ ...v, forms: v.forms.map(f => f.id !== formId ? f : { ...f, ...patch }) })) });
+
+  // Re-run enrichment for one form using its per-form prompt.
+  const handleRegenerate = async (form: StudyForm) => {
+    setRegenId(form.id);
+    setSaveMsg(null);
+    try {
+      const { fields, rules } = await regenerateForm({
+        formName: form.name,
+        formDescription: form.description,
+        studyTitle: study.studyTitle,
+        indication: study.indication,
+        protocolText,
+        prompt: form.prompt,
+      });
+      updateForm(form.id, { fields, rules });
+    } catch (e) {
+      setSaveMsg(e instanceof Error ? e.message : 'Regenerate failed');
+    } finally {
+      setRegenId(null);
+    }
+  };
+
+  // Persist the study (create or update).
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      const saved = await saveStudy(study, studyId);
+      if (saved.id && saved.id !== studyId) onStudyIdChange?.(saved.id);
+      setStudy(saved);
+      setSaveMsg('Saved');
+    } catch (e) {
+      setSaveMsg(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const activeVisit = study.visits.find(v => v.id === activeVisitId) ?? study.visits[0];
   // Active form within the selected visit; falls back to the first form so a
   // visit change automatically lands on that visit's first form.
@@ -165,14 +258,27 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
               <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">{study.documents.length} source doc{study.documents.length !== 1 ? 's' : ''}</Pill>
             </div>
           </div>
-          <button onClick={onReset} className="lift" style={{
-            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-            borderRadius: 9, border: '1px solid rgba(255,255,255,0.2)',
-            background: 'rgba(255,255,255,0.06)', color: '#e2e8f0',
-            cursor: 'pointer', fontSize: 12.5, fontWeight: 500, flexShrink: 0,
-          }}>
-            <RotateCcw size={13} /> New Build
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {saveMsg && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: saveMsg === 'Saved' ? '#4ade80' : '#fca5a5' }}>{saveMsg}</span>
+            )}
+            <button onClick={handleSave} disabled={saving} className="lift" style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+              borderRadius: 9, border: '1px solid rgba(242,106,27,0.5)',
+              background: 'rgba(242,106,27,0.9)', color: '#fff',
+              cursor: saving ? 'wait' : 'pointer', fontSize: 12.5, fontWeight: 600,
+            }}>
+              <Save size={13} /> {saving ? 'Saving…' : studyId ? 'Save' : 'Save study'}
+            </button>
+            <button onClick={onReset} className="lift" style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+              borderRadius: 9, border: '1px solid rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.06)', color: '#e2e8f0',
+              cursor: 'pointer', fontSize: 12.5, fontWeight: 500,
+            }}>
+              <RotateCcw size={13} /> New Build
+            </button>
+          </div>
         </div>
 
         {/* Review counter strip */}
@@ -262,6 +368,22 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
                   </span>
                 </div>
               )}
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+                {activeVisit && (
+                  <>
+                    <button className="lift" title="Rename visit" onClick={() => {
+                      const n = window.prompt('Rename visit', activeVisit.name);
+                      if (n && n.trim()) renameVisit(activeVisit.id, n.trim());
+                    }} style={visitCtlBtn}><Pencil size={13} /></button>
+                    <button className="lift" title="Delete visit" onClick={() => {
+                      if (window.confirm(`Delete visit "${activeVisit.name}" and its forms?`)) removeVisit(activeVisit.id);
+                    }} style={visitCtlBtn}><Trash2 size={13} /></button>
+                  </>
+                )}
+                <button className="lift" onClick={addVisit} style={{ ...visitCtlBtn, color: '#2563eb', borderColor: '#bfdbfe', width: 'auto', padding: '0 11px', gap: 6, fontWeight: 600, fontSize: 12.5 }}>
+                  <Plus size={14} /> Visit
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', minHeight: 420 }}>
@@ -297,6 +419,37 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
                     </button>
                   );
                 })}
+                {activeVisit && (
+                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <button className="lift" onClick={() => addForm(activeVisit.id)} style={{
+                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                      padding: '9px', borderRadius: 9, border: '1px dashed #cbd5e1',
+                      background: '#fff', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                    }}>
+                      <Plus size={14} /> Add blank form
+                    </button>
+                    <select
+                      value=""
+                      onChange={e => { if (e.target.value && activeVisit) { addForm(activeVisit.id, e.target.value); e.currentTarget.value = ''; } }}
+                      style={{
+                        width: '100%', padding: '9px', borderRadius: 9, border: '1px solid #e2e8f0',
+                        background: '#fff', fontSize: 12.5, color: '#475569', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >
+                      <option value="">+ Add standard form…</option>
+                      {ALL_STANDARD_NAMES.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                    {/screen/i.test(activeVisit.name) && (
+                      <button className="lift" onClick={() => sortFormsStandard(activeVisit.id)} style={{
+                        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        padding: '8px', borderRadius: 9, border: '1px solid #e2e8f0',
+                        background: '#fafbfc', color: '#64748b', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      }}>
+                        <ListChecks size={13} /> Sort to standard order
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Active form — its headings (sections) and questions.
@@ -313,9 +466,13 @@ export default function StudyBuilder({ study, setStudy, onReset }: StudyBuilderP
                       onRule={setRuleAccepted}
                       onEditField={openEdit}
                       onAddField={openAdd}
+                      onUpdateForm={updateForm}
+                      onRegenerate={handleRegenerate}
+                      regenerating={regenId === activeForm.id}
+                      onDeleteForm={() => activeVisit && removeForm(activeVisit.id, activeForm.id)}
                     />
                   ) : (
-                    <p style={{ color: '#94a3b8', fontSize: 13 }}>This visit has no forms.</p>
+                    <p style={{ color: '#94a3b8', fontSize: 13 }}>This visit has no forms yet. Use “Add form” to create one.</p>
                   )}
                 </div>
               </div>
@@ -377,13 +534,18 @@ function groupFieldsBySection(fields: StudyField[]): { key: string; section: str
   }));
 }
 
-function FormBlock({ form, onField, onRule, onEditField, onAddField }: {
+function FormBlock({ form, onField, onRule, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm }: {
   form: StudyForm;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
   onRule: (formId: string, ruleId: string, accepted: boolean) => void;
   onEditField: (formId: string, field: StudyField) => void;
   onAddField: (formId: string) => void;
+  onUpdateForm: (formId: string, patch: Partial<StudyForm>) => void;
+  onRegenerate: (form: StudyForm) => void;
+  regenerating: boolean;
+  onDeleteForm: () => void;
 }) {
+  const [showPrompt, setShowPrompt] = useState(false);
   return (
     <div style={{
       border: '1px solid #e2e8f0', borderRadius: 14, marginBottom: 18, overflow: 'hidden',
@@ -395,9 +557,49 @@ function FormBlock({ form, onField, onRule, onEditField, onAddField }: {
             <Pill bg="#f0fdf4" color="#15803d"><Check size={11} /> Template: {form.appliedTemplate}</Pill>
           )}
           <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>{form.fields.length} fields</span>
+          <button className="lift" title="Customize prompt / regenerate" onClick={() => setShowPrompt(s => !s)} style={visitCtlBtn}>
+            <RefreshCw size={13} color={showPrompt ? '#2563eb' : '#64748b'} />
+          </button>
+          <button className="lift" title="Rename form" onClick={() => {
+            const n = window.prompt('Rename form', form.name);
+            if (n && n.trim()) onUpdateForm(form.id, { name: n.trim() });
+          }} style={visitCtlBtn}><Pencil size={13} /></button>
+          <button className="lift" title="Delete form" onClick={() => {
+            if (window.confirm(`Delete form "${form.name}"?`)) onDeleteForm();
+          }} style={visitCtlBtn}><Trash2 size={13} /></button>
         </div>
         {form.description && <p style={{ fontSize: 12.5, color: '#64748b', marginTop: 4 }}>{form.description}</p>}
       </div>
+
+      {/* Per-form prompt + regenerate */}
+      {showPrompt && (
+        <div style={{ padding: '12px 18px', background: '#fbfcfe', borderBottom: '1px solid #eef2f7' }}>
+          <label style={{ fontSize: 11.5, fontWeight: 700, color: '#7c3aed', letterSpacing: 0.3, textTransform: 'uppercase' }}>
+            Form instructions
+          </label>
+          <textarea
+            value={form.prompt ?? ''}
+            onChange={e => onUpdateForm(form.id, { prompt: e.target.value })}
+            placeholder="Tell the AI how to (re)build this form — e.g. “add a Comments field”, “use 24-hour time”, “include all CTCAE grades”…"
+            rows={2}
+            style={{
+              width: '100%', marginTop: 6, padding: '9px 11px', borderRadius: 9,
+              border: '1.5px solid #cbd5e1', fontSize: 13, fontFamily: 'inherit',
+              color: '#1e293b', resize: 'vertical', boxSizing: 'border-box', outline: 'none',
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <button className="lift" disabled={regenerating} onClick={() => onRegenerate(form)} style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 9,
+              border: 'none', background: regenerating ? '#cbd5e1' : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+              color: '#fff', fontSize: 13, fontWeight: 600, cursor: regenerating ? 'wait' : 'pointer',
+            }}>
+              <RefreshCw size={13} style={regenerating ? { animation: 'spin 1s linear infinite' } : undefined} />
+              {regenerating ? 'Regenerating…' : 'Regenerate this form'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div>
         {groupFieldsBySection(form.fields).map((group, gi) => (
@@ -462,6 +664,69 @@ function FormBlock({ form, onField, onRule, onEditField, onAddField }: {
           ))}
         </div>
       )}
+
+      {/* Alerts */}
+      <FormAlerts form={form} onUpdateForm={onUpdateForm} />
+    </div>
+  );
+}
+
+const ALERT_COLORS: Record<'info' | 'warning' | 'critical', { bg: string; fg: string }> = {
+  info: { bg: '#eff6ff', fg: '#2563eb' },
+  warning: { bg: '#fffbeb', fg: '#b45309' },
+  critical: { bg: '#fef2f2', fg: '#b91c1c' },
+};
+let newAlertCounter = 0;
+
+function FormAlerts({ form, onUpdateForm }: { form: StudyForm; onUpdateForm: (formId: string, patch: Partial<StudyForm>) => void }) {
+  const alerts = form.alerts ?? [];
+  const setAlerts = (next: StudyForm['alerts']) => onUpdateForm(form.id, { alerts: next });
+
+  const addAlert = () => {
+    const message = window.prompt('Alert message (e.g. “Notify PI immediately if the AE is serious”)');
+    if (!message || !message.trim()) return;
+    newAlertCounter += 1;
+    setAlerts([...alerts, { id: `al-${Date.now()}-${newAlertCounter}`, level: 'warning', message: message.trim() }]);
+  };
+  const cycleLevel = (id: string) =>
+    setAlerts(alerts.map(a => a.id !== id ? a : { ...a, level: a.level === 'info' ? 'warning' : a.level === 'warning' ? 'critical' : 'info' }));
+  const editAlert = (id: string) => {
+    const a = alerts.find(x => x.id === id);
+    const message = window.prompt('Edit alert message', a?.message);
+    if (message !== null) setAlerts(alerts.map(x => x.id !== id ? x : { ...x, message }));
+  };
+  const removeAlert = (id: string) => setAlerts(alerts.filter(a => a.id !== id));
+
+  return (
+    <div style={{ padding: '14px 18px', background: '#fff', borderTop: '1px solid #eef2f7' }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: alerts.length ? 10 : 0 }}>
+        <p style={{ fontSize: 11.5, fontWeight: 700, color: '#b45309', letterSpacing: 0.4, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <AlertTriangle size={13} /> Alerts
+        </p>
+        <button className="lift" onClick={addAlert} style={{
+          marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+          borderRadius: 7, border: '1px solid #fde68a', background: '#fffbeb', color: '#b45309',
+          fontSize: 12, fontWeight: 600, cursor: 'pointer',
+        }}><Plus size={13} /> Add alert</button>
+      </div>
+      {alerts.map(a => {
+        const c = ALERT_COLORS[a.level];
+        const fld = a.fieldId ? form.fields.find(f => f.id === a.fieldId) : undefined;
+        return (
+          <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+            <button className="lift" onClick={() => cycleLevel(a.id)} title="Cycle severity" style={{
+              border: 'none', cursor: 'pointer', padding: '3px 9px', borderRadius: 20,
+              background: c.bg, color: c.fg, fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3,
+            }}>{a.level}</button>
+            <span style={{ flex: 1, fontSize: 13, color: '#334155' }}>
+              {a.message}
+              {fld && <span style={{ fontSize: 11, color: '#94a3b8' }}> · on “{fld.label}”</span>}
+            </span>
+            <button className="lift" onClick={() => editAlert(a.id)} style={visitCtlBtn} aria-label="Edit alert"><Pencil size={12} /></button>
+            <button className="lift" onClick={() => removeAlert(a.id)} style={visitCtlBtn} aria-label="Remove alert"><X size={13} /></button>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -563,9 +828,14 @@ function FieldInput({ field, disabled }: { field: StudyField; disabled: boolean 
     case 'decimal':
       return <input type="number" step="any" disabled={disabled} placeholder="0.0" style={base} />;
     case 'date':
-      return <input type="date" disabled={disabled} style={base} />;
+      // When a template date format is set, preview it as a formatted text field.
+      return field.format
+        ? <input type="text" disabled={disabled} placeholder={field.format} style={base} />
+        : <input type="date" disabled={disabled} style={base} />;
     case 'datetime':
-      return <input type="datetime-local" disabled={disabled} style={base} />;
+      return field.format
+        ? <input type="text" disabled={disabled} placeholder={field.format} style={base} />
+        : <input type="datetime-local" disabled={disabled} style={base} />;
     case 'time':
       return <input type="time" disabled={disabled} style={base} />;
     case 'select':

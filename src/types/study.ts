@@ -38,6 +38,8 @@ export interface StudyField {
   section?: string;
   /** Calculation expression for type "calculated" (e.g. "weight / (height/100)^2"). */
   expression?: string;
+  /** Optional display-format hint (e.g. date segment order). Phase 2. */
+  format?: string;
   // ---- Traceability ----
   /** Source document this field was derived from. */
   source?: string;
@@ -69,8 +71,23 @@ export interface StudyForm {
   description?: string;
   /** If a standard template was applied (AE log, ConMed, vitals, med history). */
   appliedTemplate?: string | null;
+  /** Per-form prompt used to (re)generate this form during review. */
+  prompt?: string;
   fields: StudyField[];
   rules: ValidationRule[];
+  /** Alerts/notifications configured on this form (Phase 2). */
+  alerts?: FormAlert[];
+}
+
+// A flag/notification rule on a form or a specific field.
+export interface FormAlert {
+  id: string;
+  level: 'info' | 'warning' | 'critical';
+  message: string;
+  /** Plain-language condition that raises the alert. */
+  trigger?: string;
+  /** Optional field this alert is attached to. */
+  fieldId?: string;
 }
 
 // A visit or log in the study schedule.
@@ -123,6 +140,8 @@ export interface IngestedDocument {
 
 // The complete structured study the AI produces and the reviewer approves.
 export interface StudyModel {
+  /** Persistence id (set once saved to the backend). */
+  id?: string;
   studyTitle: string;
   studyDescription: string;
   protocolNumber?: string;
@@ -134,4 +153,88 @@ export interface StudyModel {
   visits: StudyVisit[];
   eligibility: EligibilityCriterion[];
   findings: IntelligenceFinding[];
+  /** Applied template and date-format preference. Phase 2. */
+  templateId?: string;
+  dateFormatPreference?: string;
+}
+
+// ---- Templates: reusable form preferences applied at build time (Phase 2) ----
+export type DateSegment = 'D' | 'M' | 'Y';
+
+export interface TemplatePreferences {
+  /** Date format token string, e.g. "YYYY-MM-DD", "DD-MMM-YYYY", "YY". Preferred. */
+  dateFormat?: string;
+  /** Legacy segment order, e.g. ['M','Y','D']. Used as a fallback. */
+  dateOrder?: DateSegment[];
+  /** Legacy separator between date segments. */
+  dateSeparator?: string;
+  timeFormat: '12h' | '24h';
+  /** Ensure a signature field on consent/completion forms. */
+  requireSignature: boolean;
+  /** Allow document-upload (file) fields. */
+  documentUploadFields: boolean;
+  /** Inject the General Sections log (Medical History, Allergies, …). */
+  generalSections: boolean;
+  /** Order Screening visits chronologically with the canonical form sequence. */
+  screeningOrder: boolean;
+  /** Default alerts seeded onto generated forms. */
+  alertDefaults?: FormAlert[];
+  /** Free-text instructions injected directly into the build prompt. */
+  instructions?: string;
+  /** Plan-mode questions selected to feed the build prompt. */
+  questions?: TemplateQuestion[];
+}
+
+// A selectable "Plan Mode" question fed into the build prompt.
+export type QuestionAnswerType =
+  | 'yesno'
+  | 'date'
+  | 'time'
+  | 'dropdown'
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'preference';
+
+export interface TemplateQuestion {
+  /** Stable id — a slug for predefined questions, a DB id for custom ones. */
+  id: string;
+  text: string;
+  answerType: QuestionAnswerType;
+  /** Grouping label, e.g. "Standard eSource (Visit)", "Client preferences (Visit)", "Custom". */
+  group: string;
+  /** Options for dropdown answers. */
+  options?: string[];
+  /** True when user-created (persisted to the question library). */
+  custom?: boolean;
+}
+
+export interface Template {
+  id?: string;
+  name: string;
+  description?: string;
+  preferences: TemplatePreferences;
+}
+
+export const DEFAULT_PREFERENCES: TemplatePreferences = {
+  dateFormat: 'DD-MMM-YYYY',
+  dateOrder: ['M', 'Y', 'D'],
+  dateSeparator: ' ',
+  timeFormat: '24h',
+  requireSignature: true,
+  documentUploadFields: true,
+  generalSections: true,
+  screeningOrder: true,
+};
+
+// Lightweight row for the saved-studies ("My Studies") list.
+export interface StudySummary {
+  id: string;
+  studyTitle: string;
+  protocolNumber?: string;
+  phase?: string;
+  status: string;
+  updatedAt: string;
+  visitCount: number;
+  fieldCount: number;
 }
