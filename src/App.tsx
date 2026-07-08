@@ -144,7 +144,9 @@ export default function App() {
 
       <main style={{
         marginLeft: SIDEBAR_WIDTH,
-        padding: view === 'builder' && step === 'build' ? '28px 32px 64px' : '40px 32px 64px',
+        padding: view === 'builder'
+          ? (step === 'build' ? '28px 32px 64px' : '24px 32px 32px')
+          : '40px 32px 64px',
       }}>
         <div style={{ maxWidth: view === 'builder' && step === 'build' ? 1600 : 1080, margin: '0 auto' }}>
         {view === 'dashboard' && (
@@ -160,51 +162,52 @@ export default function App() {
 
         {view === 'builder' && step === 'upload' && (
           <>
-            {/* Hero */}
-            <div className="float-in" style={{ textAlign: 'center', marginBottom: 40 }}>
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '6px 14px 6px 10px', borderRadius: 20,
-                background: 'rgba(255,255,255,0.7)', border: '1px solid #fbdcc4',
-                boxShadow: '0 2px 10px rgba(242,106,27,0.10)', marginBottom: 20,
-              }}>
-                <Sparkles size={14} color="#f26a1b" />
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#c2410c', letterSpacing: 0.2 }}>AI-Native eSource Build Pipeline</span>
-              </div>
-              <h1 style={{ fontSize: 44, fontWeight: 800, color: '#0b1220', marginBottom: 16, letterSpacing: -1.4, lineHeight: 1.1 }}>
-                Documents in.<br />
-                <span style={{
-                  background: 'linear-gradient(100deg, #f26a1b 0%, #fb923c 55%, #f59e0b 100%)',
-                  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-                }}>An approved structured build out.</span>
-              </h1>
-              <p style={{ fontSize: 16.5, color: '#52617a', maxWidth: 620, margin: '0 auto', lineHeight: 1.65 }}>
-                Upload your protocol and supporting source documents. The AI reads across all of them and
-                builds one structured study — visits, forms, and typed fields — that a reviewer can correct and approve.
-              </p>
-            </div>
-
-            {/* Pipeline strip */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 32, flexWrap: 'wrap' }}>
-              {[
-                { icon: <FileText size={14} />, text: 'Ingestion' },
-                { icon: <Layers size={14} />, text: 'Structured Build' },
-                { icon: <CheckCircle2 size={14} />, text: 'Human Review' },
-                { icon: <AlertTriangle size={14} />, text: 'Intelligence' },
-                { icon: <FileOutput size={14} />, text: 'CTMS Export' },
-              ].map(({ icon, text }, i) => (
-                <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 7,
-                    padding: '8px 15px', borderRadius: 24, background: 'rgba(255,255,255,0.85)',
-                    border: '1px solid rgba(226,232,240,0.9)', fontSize: 13, fontWeight: 600, color: '#334155',
-                    boxShadow: '0 1px 2px rgba(15,23,42,0.05)',
-                  }}>
-                    <span style={{ color: i === 1 ? '#f26a1b' : '#2563eb', display: 'inline-flex' }}>{icon}</span> {text}
-                  </div>
-                  {i < 4 && <span style={{ color: '#cbd5e1', fontSize: 15 }}>→</span>}
+            {/* Compact header: title left, pipeline steps right — no scroll needed. */}
+            <div className="float-in" style={{
+              display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+              gap: 18, flexWrap: 'wrap', marginBottom: 20,
+            }}>
+              <div style={{ minWidth: 320 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                  <Sparkles size={14} color="#f26a1b" />
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: '#c2410c', letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                    AI-Native eSource Build Pipeline
+                  </span>
                 </div>
-              ))}
+                <h1 style={{ fontSize: 26, fontWeight: 800, color: '#0b1220', letterSpacing: -0.7, lineHeight: 1.2 }}>
+                  Documents in.{' '}
+                  <span style={{
+                    background: 'linear-gradient(100deg, #f26a1b 0%, #fb923c 55%, #f59e0b 100%)',
+                    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+                  }}>An approved structured build out.</span>
+                </h1>
+                <p style={{ fontSize: 13, color: '#52617a', marginTop: 6, maxWidth: 560, lineHeight: 1.55 }}>
+                  The AI reads across every uploaded document and builds one structured study —
+                  visits, forms, and typed fields — that a reviewer corrects and approves.
+                </p>
+              </div>
+
+              {/* Slim pipeline strip */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                {[
+                  { icon: <FileText size={12} />, text: 'Ingestion' },
+                  { icon: <Layers size={12} />, text: 'Build' },
+                  { icon: <CheckCircle2 size={12} />, text: 'Review' },
+                  { icon: <AlertTriangle size={12} />, text: 'Intelligence' },
+                  { icon: <FileOutput size={12} />, text: 'Export' },
+                ].map(({ icon, text }, i) => (
+                  <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '5px 10px', borderRadius: 20, background: 'rgba(255,255,255,0.85)',
+                      border: '1px solid rgba(226,232,240,0.9)', fontSize: 11.5, fontWeight: 600, color: '#475569',
+                    }}>
+                      <span style={{ color: i === 1 ? '#f26a1b' : '#2563eb', display: 'inline-flex' }}>{icon}</span> {text}
+                    </div>
+                    {i < 4 && <span style={{ color: '#cbd5e1', fontSize: 12 }}>→</span>}
+                  </div>
+                ))}
+              </div>
             </div>
 
             <OptionsPanel options={options} onChange={setOptions} templates={templates} />
@@ -214,9 +217,9 @@ export default function App() {
               boxShadow: '0 18px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.06)', overflow: 'hidden',
             }}>
               <div style={{ height: 4, background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 35%, #f26a1b 100%)' }} />
-              <div style={{ padding: '28px 32px' }}>
-                <div style={{ marginBottom: 16 }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginBottom: 4 }}>Study Documents</p>
+              <div style={{ padding: '20px 26px 22px' }}>
+                <div style={{ marginBottom: 14 }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginBottom: 3 }}>Study Documents</p>
                   <p style={{ fontSize: 12.5, color: '#94a3b8', lineHeight: 1.5 }}>
                     The <strong style={{ color: '#475569' }}>Protocol</strong> drives the visit schedule (its Schedule of Activities table + footnotes).
                     The <strong style={{ color: '#475569' }}>eCRF / Completion Guide</strong> supplies the exact forms and fields.
@@ -242,8 +245,8 @@ export default function App() {
                 </div>
 
                 <button onClick={handleBuild} disabled={protocolFiles.length === 0} style={{
-                  width: '100%', marginTop: 22, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', gap: 9, padding: '15px', borderRadius: 13, border: 'none',
+                  width: '100%', marginTop: 16, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: 9, padding: '13px', borderRadius: 13, border: 'none',
                   background: protocolFiles.length === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #fb8c3b 0%, #f26a1b 55%, #ea5e0b 100%)',
                   color: '#fff', fontSize: 15, fontWeight: 700, letterSpacing: 0.1,
                   cursor: protocolFiles.length === 0 ? 'not-allowed' : 'pointer',
@@ -271,7 +274,7 @@ export default function App() {
             )}
 
             {/* Disclaimer */}
-            <p style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', marginTop: 28, maxWidth: 640, marginInline: 'auto', lineHeight: 1.5 }}>
+            <p style={{ textAlign: 'center', fontSize: 11.5, color: '#94a3b8', marginTop: 14, maxWidth: 640, marginInline: 'auto', lineHeight: 1.5 }}>
               Conceptual reference only. AI generation is real; study data may be representative. Every AI output is a
               draft a human approves — not certified or submission-ready.
             </p>

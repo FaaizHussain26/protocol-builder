@@ -12,8 +12,10 @@ interface OptionsPanelProps {
 }
 
 export default function OptionsPanel({ options, onChange, disabled, templates = [] }: OptionsPanelProps) {
-  const [open, setOpen] = useState(true);
+  // Collapsed by default so the New Build page fits without scrolling.
+  const [open, setOpen] = useState(false);
   const o = { ...DEFAULT_OPTIONS, ...options };
+  const selectedTemplate = templates.find(t => t.id === options.templateId);
 
   const update = (patch: Partial<BuildOptions>) => onChange({ ...options, ...patch });
   const reset = () => onChange({});
@@ -25,23 +27,27 @@ export default function OptionsPanel({ options, onChange, disabled, templates = 
   return (
     <div style={{
       background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0',
-      overflow: 'hidden', marginBottom: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      overflow: 'hidden', marginBottom: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
     }}>
       <button type="button" onClick={() => setOpen(v => !v)} style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-        padding: '16px 24px', background: '#fafbff', border: 'none',
+        padding: '12px 24px', background: '#fafbff', border: 'none',
         cursor: 'pointer', textAlign: 'left',
       }}>
         <div style={{
-          width: 34, height: 34, borderRadius: 9, background: '#eff6ff',
+          width: 32, height: 32, borderRadius: 9, background: '#eff6ff',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
-          <Settings2 size={17} color="#2563eb" />
+          <Settings2 size={16} color="#2563eb" />
         </div>
         <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Customize the Build</p>
+          <p style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b' }}>Customize the Build</p>
           <p style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>
-            {open ? 'Adjust how the AI builds your structured eSource' : 'Prompt and preferences template'}
+            {open
+              ? 'Adjust how the AI builds your structured eSource'
+              : selectedTemplate
+                ? `Template: ${selectedTemplate.name}`
+                : 'Prompt and preferences template'}
           </p>
         </div>
         {open ? <ChevronUp size={18} color="#94a3b8" /> : <ChevronDown size={18} color="#94a3b8" />}
@@ -65,7 +71,7 @@ export default function OptionsPanel({ options, onChange, disabled, templates = 
               {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
             <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 6 }}>
-              Applies date/time format, signature, alerts, Screening order, General Sections, and prompt instructions. Manage these from “Preferences Templates” in the top bar.
+              Applies date/time format, signature, alerts, Screening order, General Sections, and prompt instructions. Manage these from “Preferences Templates” in the sidebar.
             </p>
           </div>
 
