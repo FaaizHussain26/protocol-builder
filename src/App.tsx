@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
-  Sparkles, Shield, AlertCircle, Loader, CheckCircle2,
-  FileText, Layers, AlertTriangle, FileOutput, FolderOpen, SlidersHorizontal,
+  Sparkles, AlertCircle, Loader, CheckCircle2,
+  FileText, Layers, AlertTriangle, FileOutput,
 } from 'lucide-react';
 import DocumentUploadBox from './components/DocumentUploadBox';
 import OptionsPanel from './components/OptionsPanel';
-import StudyBuilder from './components/StudyBuilder';
+import StudyBuilder, { type Tab as StudyTab } from './components/StudyBuilder';
 import StudyLibrary from './components/StudyLibrary';
 import TemplateManager from './components/TemplateManager';
+import Sidebar, { SIDEBAR_WIDTH, type AppView } from './components/Sidebar';
+import Dashboard from './components/Dashboard';
+import PassLock, { isUnlocked, lockApp } from './components/PassLock';
 import { extractTextFromFiles } from './utils/extractText';
 import { buildStudyFromDocuments, listTemplates } from './utils/api';
 import type { BuildOptions } from './utils/api';
@@ -20,6 +23,9 @@ const CONFIGURED = !!import.meta.env.VITE_API_BASE_URL;
 const DEMO_MODE = typeof window !== 'undefined' && window.location.hash === '#demo';
 
 export default function App() {
+  const [locked, setLocked] = useState(() => !isUnlocked());
+  const [view, setView] = useState<AppView>(DEMO_MODE ? 'builder' : 'dashboard');
+  const [studyTab, setStudyTab] = useState<StudyTab>('build');
   const [step, setStep] = useState<Step>(DEMO_MODE ? 'build' : 'upload');
   const [protocolFiles, setProtocolFiles] = useState<File[]>([]);
   const [ecrfFiles, setEcrfFiles] = useState<File[]>([]);
@@ -27,9 +33,7 @@ export default function App() {
   const [study, setStudy] = useState<StudyModel | null>(DEMO_MODE ? DEMO_STUDY : null);
   const [currentStudyId, setCurrentStudyId] = useState<string | undefined>(undefined);
   const [corpusText, setCorpusText] = useState('');
-  const [libraryOpen, setLibraryOpen] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [ingestIndex, setIngestIndex] = useState(0);
@@ -81,6 +85,7 @@ export default function App() {
 
       setStudy(built);
       setCurrentStudyId(undefined); // a fresh, unsaved build
+      setStudyTab('build');
       setStep('build');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
@@ -97,6 +102,7 @@ export default function App() {
     setCorpusText('');
     setProtocolFiles([]);
     setEcrfFiles([]);
+    setStudyTab('build');
     setStep('upload');
   };
 
@@ -104,81 +110,55 @@ export default function App() {
     setStudy(s);
     setCurrentStudyId(id);
     setCorpusText(''); // saved studies don't carry the original corpus
-    setLibraryOpen(false);
+    setStudyTab('build');
     setStep('build');
+    setView('builder');
   };
+
+  // Sidebar "New Build": confirm before discarding an open eSource.
+  const handleNewBuild = () => {
+    if (step === 'build' && study) {
+      if (!window.confirm('Discard the current eSource and start a new build?')) return;
+      handleReset();
+    }
+    setView('builder');
+  };
+
+  if (locked) return <PassLock onUnlock={() => setLocked(false)} />;
+
+  const studyOpen = step === 'build' && !!study;
 
   return (
     <div style={{ minHeight: '100vh', background: 'transparent' }}>
-      {/* Top Nav */}
-      <nav style={{
-        background: 'rgba(255,255,255,0.72)', borderBottom: '1px solid rgba(226,232,240,0.8)',
-        backdropFilter: 'blur(14px) saturate(140%)', WebkitBackdropFilter: 'blur(14px) saturate(140%)',
-        padding: '0 32px', height: 64,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 20px rgba(15,23,42,0.04)',
-        position: 'sticky', top: 0, zIndex: 100,
+      <Sidebar
+        view={view}
+        onNavigate={setView}
+        onNewBuild={handleNewBuild}
+        study={study}
+        studyOpen={studyOpen}
+        studyTab={studyTab}
+        onStudyTab={(t) => { setStudyTab(t); setView('builder'); }}
+        apiConfigured={CONFIGURED}
+        onLock={() => { lockApp(); setLocked(true); }}
+      />
+
+      <main style={{
+        marginLeft: SIDEBAR_WIDTH,
+        padding: view === 'builder' && step === 'build' ? '28px 32px 64px' : '40px 32px 64px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 38, height: 38, borderRadius: 11,
-            background: 'linear-gradient(140deg, #0f172a 0%, #1e293b 45%, #f26a1b 130%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 6px 16px rgba(242,106,27,0.28), 0 1px 0 rgba(255,255,255,0.25) inset',
-          }}>
-            <Layers size={19} color="#fff" />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <span style={{ fontWeight: 800, fontSize: 16.5, color: '#0f172a', letterSpacing: -0.3 }}>eSource Builder</span>
-            <span style={{
-              fontSize: 10.5, fontWeight: 700, padding: '3px 9px', letterSpacing: 0.3,
-              borderRadius: 20, background: '#fdf1e8', color: '#ea5e0b',
-              border: '1px solid #fbdcc4', textTransform: 'uppercase',
-            }}>Protocol Builder</span>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {CONFIGURED && (
-            <>
-              <button onClick={() => setTemplatesOpen(true)} className="lift" style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 9,
-                border: '1px solid #e2e8f0', background: '#fff', color: '#334155',
-                fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-              }}>
-                <SlidersHorizontal size={14} color="#2563eb" /> Preferences Templates
-              </button>
-              <button onClick={() => setLibraryOpen(true)} className="lift" style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 9,
-                border: '1px solid #e2e8f0', background: '#fff', color: '#334155',
-                fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-              }}>
-                <FolderOpen size={14} color="#2563eb" /> My Saved E-Sources
-              </button>
-            </>
-          )}
-          {CONFIGURED ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <CheckCircle2 size={14} color="#16a34a" />
-              <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>API Connected</span>
-            </span>
-          ) : (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Shield size={14} color="#64748b" />
-              <span style={{ fontSize: 12, color: '#64748b' }}>Backend not configured</span>
-            </span>
-          )}
-        </div>
-      </nav>
+        <div style={{ maxWidth: view === 'builder' && step === 'build' ? 1600 : 1080, margin: '0 auto' }}>
+        {view === 'dashboard' && (
+          <Dashboard
+            onNewBuild={handleNewBuild}
+            onOpenStudy={handleOpenSaved}
+            onOpenLibrary={() => setView('library')}
+            onOpenTemplates={() => setView('templates')}
+          />
+        )}
+        {view === 'library' && <StudyLibrary onOpen={handleOpenSaved} />}
+        {view === 'templates' && <TemplateManager onChanged={loadTemplates} />}
 
-      <StudyLibrary open={libraryOpen} onClose={() => setLibraryOpen(false)} onOpen={handleOpenSaved} />
-      <TemplateManager open={templatesOpen} onClose={() => setTemplatesOpen(false)} onChanged={loadTemplates} />
-
-      <main style={
-        step === 'build'
-          ? { maxWidth: 1600, margin: '0 auto', padding: '28px 32px 64px' }
-          : { maxWidth: 1080, margin: '0 auto', padding: '40px 24px' }
-      }>
-        {step === 'upload' && (
+        {view === 'builder' && step === 'upload' && (
           <>
             {/* Hero */}
             <div className="float-in" style={{ textAlign: 'center', marginBottom: 40 }}>
@@ -226,17 +206,6 @@ export default function App() {
                 </div>
               ))}
             </div>
-
-            {CONFIGURED && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px',
-                borderRadius: 12, marginBottom: 24, background: '#f0fdf4', border: '1px solid #bbf7d0',
-              }}>
-                <CheckCircle2 size={16} color="#16a34a" />
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#15803d' }}>AI Connected</span>
-                <span style={{ fontSize: 13, color: '#16a34a' }}>· Ready to build your structured study</span>
-              </div>
-            )}
 
             <OptionsPanel options={options} onChange={setOptions} templates={templates} />
 
@@ -309,7 +278,7 @@ export default function App() {
           </>
         )}
 
-        {step === 'processing' && (
+        {view === 'builder' && step === 'processing' && (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center', minHeight: 480, textAlign: 'center',
@@ -360,7 +329,7 @@ export default function App() {
           </div>
         )}
 
-        {step === 'build' && study && (
+        {view === 'builder' && step === 'build' && study && (
           <StudyBuilder
             study={study}
             setStudy={setStudy}
@@ -368,8 +337,11 @@ export default function App() {
             studyId={currentStudyId}
             protocolText={corpusText}
             onStudyIdChange={setCurrentStudyId}
+            tab={studyTab}
+            onTabChange={setStudyTab}
           />
         )}
+        </div>
       </main>
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>

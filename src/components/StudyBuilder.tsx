@@ -65,12 +65,17 @@ interface StudyBuilderProps {
   protocolText?: string;
   /** Called with the new id after a first save. */
   onStudyIdChange?: (id: string) => void;
+  /** Controlled section — when provided (by the app sidebar), the internal tab bar is hidden. */
+  tab?: Tab;
+  onTabChange?: (t: Tab) => void;
 }
 
-type Tab = 'build' | 'eligibility' | 'intelligence' | 'export';
+export type Tab = 'build' | 'eligibility' | 'intelligence' | 'export';
 
-export default function StudyBuilder({ study, setStudy, onReset, studyId, protocolText, onStudyIdChange }: StudyBuilderProps) {
-  const [tab, setTab] = useState<Tab>('build');
+export default function StudyBuilder({ study, setStudy, onReset, studyId, protocolText, onStudyIdChange, tab: controlledTab, onTabChange }: StudyBuilderProps) {
+  const [internalTab, setInternalTab] = useState<Tab>('build');
+  const tab = controlledTab ?? internalTab;
+  const setTab = onTabChange ?? setInternalTab;
   const [activeVisitId, setActiveVisitId] = useState(study.visits[0]?.id ?? '');
   const [activeFormId, setActiveFormId] = useState(study.visits[0]?.forms[0]?.id ?? '');
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
@@ -127,6 +132,36 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     });
   };
 
+  // Bulk review: set every field (and edit check) in one form to a status.
+  const setFormReview = (formId: string, status: ReviewStatus) => {
+    setStudy({
+      ...study,
+      visits: study.visits.map(v => ({
+        ...v,
+        forms: v.forms.map(f => f.id !== formId ? f : {
+          ...f,
+          fields: f.fields.map(fld => ({ ...fld, reviewStatus: status })),
+          rules: f.rules.map(r => ({ ...r, accepted: status === 'accepted' })),
+        }),
+      })),
+    });
+  };
+
+  // Bulk review: approve every field and edit check across the whole eSource.
+  const approveAll = () => {
+    setStudy({
+      ...study,
+      visits: study.visits.map(v => ({
+        ...v,
+        forms: v.forms.map(f => ({
+          ...f,
+          fields: f.fields.map(fld => ({ ...fld, reviewStatus: 'accepted' as ReviewStatus })),
+          rules: f.rules.map(r => ({ ...r, accepted: true })),
+        })),
+      })),
+    });
+  };
+
   // Map over the fields of one form.
   const mapFormFields = (formId: string, fn: (fields: StudyField[]) => StudyField[]) => {
     setStudy({
@@ -138,10 +173,28 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     });
   };
 
-  // Insert or replace a field (called on drawer save).
+  // Insert or replace a field (called on drawer save). When the user changes an
+  // AI-generated field, keep a one-time snapshot of the original so the backend
+  // can learn the correction and generate it right next time.
   const saveField = (formId: string, field: StudyField, isNew: boolean) => {
     if (isNew) mapFormFields(formId, fields => [...fields, field]);
-    else mapFormFields(formId, fields => fields.map(f => (f.id === field.id ? field : f)));
+    else mapFormFields(formId, fields => fields.map(f => {
+      if (f.id !== field.id) return f;
+      const changed =
+        f.label !== field.label || f.type !== field.type || f.required !== field.required ||
+        (f.options ?? []).join('|') !== (field.options ?? []).join('|') ||
+        (f.completionGuidance ?? '') !== (field.completionGuidance ?? '') ||
+        (f.section ?? '') !== (field.section ?? '');
+      if (!changed) return field;
+      return {
+        ...field,
+        editedByUser: true,
+        aiOriginal: f.aiOriginal ?? {
+          label: f.label, type: f.type, required: f.required,
+          options: f.options, completionGuidance: f.completionGuidance, section: f.section,
+        },
+      };
+    }));
     setEditTarget(null);
   };
 
@@ -262,6 +315,16 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
             {saveMsg && (
               <span style={{ fontSize: 12, fontWeight: 600, color: saveMsg === 'Saved' ? '#4ade80' : '#fca5a5' }}>{saveMsg}</span>
             )}
+            <button onClick={approveAll} disabled={stats.pending === 0 && stats.rejected === 0} className="lift" style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+              borderRadius: 9, border: '1px solid rgba(74,222,128,0.45)',
+              background: 'rgba(34,197,94,0.18)', color: '#4ade80',
+              cursor: stats.pending === 0 && stats.rejected === 0 ? 'default' : 'pointer',
+              opacity: stats.pending === 0 && stats.rejected === 0 ? 0.5 : 1,
+              fontSize: 12.5, fontWeight: 600,
+            }}>
+              <Check size={13} /> Approve all
+            </button>
             <button onClick={handleSave} disabled={saving} className="lift" style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
               borderRadius: 9, border: '1px solid rgba(242,106,27,0.5)',
@@ -301,10 +364,10 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
         Conceptual reference only. Every AI output is a draft a human approves — the production build will be more refined, customized, and aligned with final workflow and specifications.
       </div>
 
-      {/* Tab nav */}
+      {/* Tab nav — hidden when the app sidebar controls the section */}
       <div style={{
         background: '#fff', borderBottom: '1px solid #e2e8f0',
-        display: 'flex', padding: '0 20px', gap: 4,
+        display: controlledTab !== undefined ? 'none' : 'flex', padding: '0 20px', gap: 4,
       }}>
         {TABS.map(t => (
           <button key={t.id} className="tab-btn" onClick={() => setTab(t.id)} style={{
@@ -464,6 +527,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       form={activeForm}
                       onField={mutateField}
                       onRule={setRuleAccepted}
+                      onFormReview={setFormReview}
                       onEditField={openEdit}
                       onAddField={openAdd}
                       onUpdateForm={updateForm}
@@ -534,10 +598,11 @@ function groupFieldsBySection(fields: StudyField[]): { key: string; section: str
   }));
 }
 
-function FormBlock({ form, onField, onRule, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm }: {
+function FormBlock({ form, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm }: {
   form: StudyForm;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
   onRule: (formId: string, ruleId: string, accepted: boolean) => void;
+  onFormReview: (formId: string, status: ReviewStatus) => void;
   onEditField: (formId: string, field: StudyField) => void;
   onAddField: (formId: string) => void;
   onUpdateForm: (formId: string, patch: Partial<StudyForm>) => void;
@@ -557,6 +622,12 @@ function FormBlock({ form, onField, onRule, onEditField, onAddField, onUpdateFor
             <Pill bg="#f0fdf4" color="#15803d"><Check size={11} /> Template: {form.appliedTemplate}</Pill>
           )}
           <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>{form.fields.length} fields</span>
+          <SmallBtn active={form.fields.length > 0 && form.fields.every(f => f.reviewStatus === 'accepted')}
+            activeBg="#dcfce7" activeFg="#15803d"
+            onClick={() => onFormReview(form.id, 'accepted')}><Check size={13} /> Approve all</SmallBtn>
+          <SmallBtn active={form.fields.length > 0 && form.fields.every(f => f.reviewStatus === 'rejected')}
+            activeBg="#fee2e2" activeFg="#b91c1c"
+            onClick={() => onFormReview(form.id, 'rejected')}><X size={13} /> Reject all</SmallBtn>
           <button className="lift" title="Customize prompt / regenerate" onClick={() => setShowPrompt(s => !s)} style={visitCtlBtn}>
             <RefreshCw size={13} color={showPrompt ? '#2563eb' : '#64748b'} />
           </button>
@@ -773,11 +844,6 @@ function FieldCard({ field, onChange, onEdit }: {
             <TypeBadge type={field.type} />
             <ConfidenceBadge level={field.confidence} compact />
             {flagged && <Pill bg="#fffbeb" color="#b45309"><AlertTriangle size={11} /> Needs review</Pill>}
-            {(field.source || field.protocolSection || field.page != null) && (
-              <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                · {[field.source, field.protocolSection, field.page != null ? `p.${field.page}` : null].filter(Boolean).join(' · ')}
-              </span>
-            )}
           </div>
 
           {field.originalText && (
@@ -868,13 +934,11 @@ function FieldInput({ field, disabled }: { field: StudyField; disabled: boolean 
       );
     case 'yesno':
       return (
-        <div style={{ display: 'flex', gap: 18 }}>
-          {['Yes', 'No'].map(o => (
-            <label key={o} style={choice}>
-              <input type="radio" name={field.id} disabled={disabled} style={{ accentColor: '#2563eb' }} /> {o}
-            </label>
-          ))}
-        </div>
+        <select disabled={disabled} defaultValue="" style={base}>
+          <option value="" disabled>Select…</option>
+          <option value="Yes">Yes</option>
+          <option value="No">No</option>
+        </select>
       );
     case 'signature':
       return (

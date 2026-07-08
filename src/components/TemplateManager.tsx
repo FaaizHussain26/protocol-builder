@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { X, Plus, Pencil, Trash2, Loader, AlertCircle, SlidersHorizontal, ChevronLeft } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader, AlertCircle, SlidersHorizontal, ChevronLeft } from 'lucide-react';
 import { listTemplates, createTemplate, updateTemplate, deleteTemplate, listQuestions, createQuestion, deleteQuestion } from '../utils/api';
 import { sampleDate, renderDateSample } from '../utils/formatPrefs';
 import { PREDEFINED_QUESTIONS } from '../utils/predefinedQuestions';
 import { DEFAULT_PREFERENCES, type Template, type TemplatePreferences, type TemplateQuestion, type QuestionAnswerType } from '../types/study';
+import EsourceImport from './EsourceImport';
+import { ConfidenceBadge } from './ui';
 
 interface TemplateManagerProps {
-  open: boolean;
-  onClose: () => void;
   onChanged?: () => void;
 }
 
@@ -15,7 +15,7 @@ const DATE_PRESETS = ['DD-MMM-YYYY', 'YYYY-MM-DD', 'MM/DD/YYYY', 'DD/MM/YYYY', '
 
 const blankDraft = (): Template => ({ name: '', description: '', preferences: { ...DEFAULT_PREFERENCES } });
 
-export default function TemplateManager({ open, onClose, onChanged }: TemplateManagerProps) {
+export default function TemplateManager({ onChanged }: TemplateManagerProps) {
   const [items, setItems] = useState<Template[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,9 +38,8 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
     listQuestions().then(setCustomQuestions).catch(() => {});
   };
 
-  useEffect(() => {
-    if (open) { setDraft(null); reload(); }
-  }, [open]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setDraft(null); reload(); }, []);
 
   // ---- Plan-Mode question selection ----
   const selectedQuestions = draft?.preferences.questions ?? [];
@@ -104,8 +103,6 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
     }
   };
 
-  if (!open) return null;
-
   const setPref = <K extends keyof TemplatePreferences>(key: K, value: TemplatePreferences[K]) =>
     setDraft((d) => (d ? { ...d, preferences: { ...d.preferences, [key]: value } } : d));
 
@@ -155,16 +152,22 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
   ] as const;
 
   // Predefined questions grouped by their group label (in definition order),
-  // followed by the persisted Custom library.
+  // followed by the persisted Custom library. Questions imported from an
+  // eSource carry their own group names — surface those too so they stay
+  // visible (and deselectable) after import.
   const predefinedGroupNames = Array.from(new Set(PREDEFINED_QUESTIONS.map((q) => q.group)));
+  const knownGroups = new Set([...predefinedGroupNames, 'Custom']);
+  const importedGroupNames = Array.from(new Set(
+    selectedQuestions.filter((q) => !knownGroups.has(q.group) && !customQuestions.some((c) => c.id === q.id)).map((q) => q.group),
+  ));
   const questionGroups: { name: string; list: TemplateQuestion[] }[] = [
+    ...importedGroupNames.map((name) => ({ name, list: selectedQuestions.filter((q) => q.group === name) })),
     ...predefinedGroupNames.map((name) => ({ name, list: PREDEFINED_QUESTIONS.filter((q) => q.group === name) })),
     { name: 'Custom', list: customQuestions },
   ];
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '48px 20px' }}>
-      <div onClick={(e) => e.stopPropagation()} className="anim-form" style={{ width: draft ? 760 : 620, maxWidth: '100%', maxHeight: '86vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 18, boxShadow: '0 24px 60px rgba(15,23,42,0.3)', border: '1px solid #e2e8f0' }}>
+    <div className="anim-form" style={{ maxWidth: draft ? 860 : 720, margin: '0 auto', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 18, boxShadow: '0 18px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.06)', border: '1px solid #eaeef4', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ padding: '16px 22px', borderBottom: '1px solid #eef2f7', display: 'flex', alignItems: 'center', gap: 10 }}>
           {draft && (
@@ -172,7 +175,6 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
           )}
           <SlidersHorizontal size={18} color="#2563eb" />
           <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>{draft ? (draft.name.trim() || 'Plan Mode') : 'Preferences Templates'}</h2>
-          <button className="lift" onClick={onClose} aria-label="Close" style={{ ...iconBtn, marginLeft: 'auto' }}><X size={18} /></button>
         </div>
 
         {/* Tabs (editor only) */}
@@ -201,6 +203,7 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
               <button className="lift" onClick={() => { setEditorTab('basics'); setDraft(blankDraft()); }} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 14px', borderRadius: 10, border: '1px dashed #bfdbfe', background: '#eff6ff', color: '#2563eb', fontSize: 13, fontWeight: 600, cursor: 'pointer', width: '100%', justifyContent: 'center', marginBottom: 12 }}>
                 <Plus size={15} /> New template
               </button>
+              <EsourceImport onUseTemplate={(t) => { setEditorTab('basics'); setDraft(t); }} />
               {loading ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 14, padding: '18px 0', justifyContent: 'center' }}>
                   <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading…
@@ -304,6 +307,7 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
                         <label key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 8, cursor: 'pointer', background: isSelected(q.id) ? '#eff6ff' : 'transparent', border: `1px solid ${isSelected(q.id) ? '#bfdbfe' : 'transparent'}` }}>
                           <input type="checkbox" checked={isSelected(q.id)} onChange={() => toggleQuestion(q)} style={{ accentColor: '#2563eb' }} />
                           <span style={{ flex: 1, fontSize: 13, color: '#1e293b' }}>{q.text}</span>
+                          {q.confidence && <ConfidenceBadge level={q.confidence} compact />}
                           {q.answerType === 'yesno' ? (
                             <span style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
                               {(['yes', 'no'] as const).map((val) => {
@@ -377,7 +381,6 @@ export default function TemplateManager({ open, onClose, onChanged }: TemplateMa
             </button>
           </div>
         )}
-      </div>
     </div>
   );
 }

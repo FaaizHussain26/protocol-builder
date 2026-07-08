@@ -126,25 +126,10 @@ function drawField(doc: jsPDF, f: import('../types/study').StudyField, x: number
     case 'date': box(46, 6.5, 'DD-MMM-YYYY'); break;
     case 'datetime': box(62, 6.5, 'DD-MMM-YYYY  HH:MM'); break;
     case 'time': box(28, 6.5, 'HH:MM'); break;
-    case 'select': {
-      doc.rect(x, cy, w, 6.5);
-      doc.text('Select one', x + 2, cy + 4.3);
-      const tx = x + w - 5.5, ty = cy + 2.6;
-      doc.setFillColor(100, 116, 139);
-      doc.triangle(tx, ty, tx + 3, ty, tx + 1.5, ty + 2.4, 'F');
-      cy += 6.5;
-      if (f.options?.length) {
-        doc.setFontSize(7);
-        const opt = doc.splitTextToSize(`Options: ${f.options.join(', ')}`, w);
-        doc.text(opt, x, cy + 3);
-        cy += opt.length * 3.2 + 1;
-        doc.setFontSize(8);
-      }
-      break;
-    }
-    case 'radio': case 'yesno': case 'multiselect': case 'checkbox': {
+    // Single-choice controls (dropdowns included) print as radio options; multi-choice print as checkboxes.
+    case 'select': case 'radio': case 'yesno': case 'multiselect': case 'checkbox': {
       const opts = f.type === 'yesno' ? ['Yes', 'No'] : (f.options?.length ? f.options : ['Option 1', 'Option 2']);
-      const isRadio = f.type === 'radio' || f.type === 'yesno';
+      const isRadio = f.type === 'select' || f.type === 'radio' || f.type === 'yesno';
       doc.setTextColor(71, 85, 105);
       let ox = x;
       for (const opt of opts) {
@@ -184,15 +169,6 @@ function drawField(doc: jsPDF, f: import('../types/study').StudyField, x: number
     default: box(w, 6.5);
   }
 
-  // Traceability footnote
-  const trace = [f.protocolSection, f.page ? `p.${f.page}` : null, f.source, `conf: ${f.confidence}`]
-    .filter(Boolean).join('  ·  ');
-  if (trace) {
-    doc.setFontSize(6.5);
-    doc.setTextColor(148, 163, 184);
-    doc.text(trace, x, cy + 3);
-    cy += 4;
-  }
   return cy + 4;
 }
 
@@ -258,7 +234,9 @@ export function generateBuildSpecPDF(study: StudyModel, stats: DocStats): void {
       for (const f of fields) {
         const ctrlH = f.type === 'textarea' ? 16
           : f.type === 'signature' ? 14
-          : f.type === 'file' || f.type === 'select' ? 12
+          : f.type === 'file' ? 12
+          : f.type === 'select' || f.type === 'radio' || f.type === 'multiselect' || f.type === 'checkbox'
+            ? 6 + Math.ceil((f.options?.length ?? 2) / 3) * 6
           : 10;
         br(14 + ctrlH);
         y = drawField(doc, f, mL + 7, y, contentW - 12);
