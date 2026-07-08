@@ -162,32 +162,12 @@ export default function App() {
 
         {view === 'builder' && step === 'upload' && (
           <>
-            {/* Compact header: title left, pipeline steps right — no scroll needed. */}
+            {/* Page header: title left, slim pipeline strip right. */}
             <div className="float-in" style={{
-              display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-              gap: 18, flexWrap: 'wrap', marginBottom: 20,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 18, flexWrap: 'wrap', marginBottom: 18,
             }}>
-              <div style={{ minWidth: 320 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-                  <Sparkles size={14} color="#f26a1b" />
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: '#c2410c', letterSpacing: 0.6, textTransform: 'uppercase' }}>
-                    AI-Native eSource Build Pipeline
-                  </span>
-                </div>
-                <h1 style={{ fontSize: 26, fontWeight: 800, color: '#0b1220', letterSpacing: -0.7, lineHeight: 1.2 }}>
-                  Documents in.{' '}
-                  <span style={{
-                    background: 'linear-gradient(100deg, #f26a1b 0%, #fb923c 55%, #f59e0b 100%)',
-                    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-                  }}>An approved structured build out.</span>
-                </h1>
-                <p style={{ fontSize: 13, color: '#52617a', marginTop: 6, maxWidth: 560, lineHeight: 1.55 }}>
-                  The AI reads across every uploaded document and builds one structured study —
-                  visits, forms, and typed fields — that a reviewer corrects and approves.
-                </p>
-              </div>
-
-              {/* Slim pipeline strip */}
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0b1220', letterSpacing: -0.5 }}>New Build</h1>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
                 {[
                   { icon: <FileText size={12} />, text: 'Ingestion' },
