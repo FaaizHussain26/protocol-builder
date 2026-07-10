@@ -157,6 +157,8 @@ export interface IngestedDocument {
 export interface StudyModel {
   /** Persistence id (set once saved to the backend). */
   id?: string;
+  /** Review lifecycle: "draft" until every field is approved, then "final". */
+  status?: 'draft' | 'reviewed' | 'final';
   studyTitle: string;
   studyDescription: string;
   protocolNumber?: string;
@@ -291,4 +293,6 @@ export interface StudySummary {
   updatedAt: string;
   visitCount: number;
   fieldCount: number;
+  /** Denormalized count of accepted fields — drives draft review progress. */
+  approvedFieldCount?: number;
 }

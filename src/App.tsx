@@ -154,10 +154,12 @@ export default function App() {
             onNewBuild={handleNewBuild}
             onOpenStudy={handleOpenSaved}
             onOpenLibrary={() => setView('library')}
+            onOpenDrafts={() => setView('drafts')}
             onOpenTemplates={() => setView('templates')}
           />
         )}
-        {view === 'library' && <StudyLibrary onOpen={handleOpenSaved} />}
+        {view === 'library' && <StudyLibrary mode="final" onOpen={handleOpenSaved} />}
+        {view === 'drafts' && <StudyLibrary mode="drafts" onOpen={handleOpenSaved} />}
         {view === 'templates' && <TemplateManager onChanged={loadTemplates} />}
 
         {view === 'builder' && step === 'upload' && (

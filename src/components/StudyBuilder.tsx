@@ -80,8 +80,10 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   const [activeFormId, setActiveFormId] = useState(study.visits[0]?.forms[0]?.id ?? '');
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [regenId, setRegenId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<'draft' | 'final' | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  // Review filter: narrows the forms list and the visible fields by status.
+  const [reviewFilter, setReviewFilter] = useState<'all' | ReviewStatus>('all');
 
   // Reset the form panel's scroll to the top whenever the form/visit/tab changes,
   // so a freshly-selected form starts at its first question.
@@ -254,19 +256,23 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     }
   };
 
-  // Persist the study (create or update).
-  const handleSave = async () => {
-    setSaving(true);
+  // Every field in every form approved → eligible for "My Saved E-Sources".
+  const fullyApproved = stats.total > 0 && stats.accepted === stats.total;
+
+  // Persist the study as a draft (partially reviewed) or final (fully approved).
+  const handleSave = async (status: 'draft' | 'final') => {
+    if (status === 'final' && !fullyApproved) return;
+    setSaving(status);
     setSaveMsg(null);
     try {
-      const saved = await saveStudy(study, studyId);
+      const saved = await saveStudy({ ...study, status }, studyId);
       if (saved.id && saved.id !== studyId) onStudyIdChange?.(saved.id);
       setStudy(saved);
-      setSaveMsg('Saved');
+      setSaveMsg(status === 'final' ? 'Saved to E-Sources' : 'Draft saved');
     } catch (e) {
       setSaveMsg(e instanceof Error ? e.message : 'Save failed');
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   };
 
@@ -325,13 +331,29 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
             }}>
               <Check size={13} /> Approve all
             </button>
-            <button onClick={handleSave} disabled={saving} className="lift" style={{
+            <button onClick={() => handleSave('draft')} disabled={saving !== null} className="lift" style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-              borderRadius: 9, border: '1px solid rgba(242,106,27,0.5)',
-              background: 'rgba(242,106,27,0.9)', color: '#fff',
+              borderRadius: 9, border: '1px solid rgba(251,191,36,0.5)',
+              background: 'rgba(245,158,11,0.22)', color: '#fbbf24',
               cursor: saving ? 'wait' : 'pointer', fontSize: 12.5, fontWeight: 600,
             }}>
-              <Save size={13} /> {saving ? 'Saving…' : studyId ? 'Save' : 'Save study'}
+              <Pencil size={13} /> {saving === 'draft' ? 'Saving…' : 'Save draft'}
+            </button>
+            <button
+              onClick={() => handleSave('final')}
+              disabled={saving !== null || !fullyApproved}
+              className="lift"
+              title={fullyApproved ? 'Save the fully-approved eSource' : `Approve all fields first (${stats.accepted}/${stats.total} approved)`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                borderRadius: 9, border: '1px solid rgba(242,106,27,0.5)',
+                background: fullyApproved ? 'rgba(242,106,27,0.9)' : 'rgba(148,163,184,0.25)',
+                color: fullyApproved ? '#fff' : 'rgba(226,232,240,0.55)',
+                cursor: saving ? 'wait' : fullyApproved ? 'pointer' : 'not-allowed',
+                fontSize: 12.5, fontWeight: 600,
+              }}
+            >
+              <Save size={13} /> {saving === 'final' ? 'Saving…' : 'Save to E-Sources'}
             </button>
             <button onClick={onReset} className="lift" style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
@@ -431,6 +453,28 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                   </span>
                 </div>
               )}
+              {/* RAG review filter — narrows the forms list and visible fields */}
+              <div style={{ display: 'flex', gap: 3, alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 9, padding: 3 }}>
+                {([
+                  { key: 'all', label: 'All', count: stats.total, color: '#475569' },
+                  { key: 'accepted', label: 'Approved', count: stats.accepted, color: RAG.accepted },
+                  { key: 'pending', label: 'Pending', count: stats.pending, color: RAG.pending },
+                  { key: 'rejected', label: 'Rejected', count: stats.rejected, color: RAG.rejected },
+                ] as const).map(f => {
+                  const active = reviewFilter === f.key;
+                  return (
+                    <button key={f.key} onClick={() => setReviewFilter(f.key)} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 9px',
+                      borderRadius: 7, border: 'none', cursor: 'pointer',
+                      background: active ? `${f.color}1a` : 'transparent',
+                      color: active ? f.color : '#94a3b8', fontSize: 11.5, fontWeight: 700,
+                    }}>
+                      {f.key !== 'all' && <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.color }} />}
+                      {f.label} {f.count}
+                    </button>
+                  );
+                })}
+              </div>
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
                 {activeVisit && (
                   <>
@@ -459,8 +503,12 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                 <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase', padding: '0 8px', marginBottom: 10 }}>
                   Forms
                 </p>
-                {(activeVisit?.forms ?? []).map(f => {
+                {(activeVisit?.forms ?? [])
+                  .filter(f => reviewFilter === 'all' || f.fields.some(x => x.reviewStatus === reviewFilter))
+                  .map(f => {
                   const active = f.id === activeForm?.id;
+                  const status = formReviewStatus(f);
+                  const approvedCount = f.fields.filter(x => x.reviewStatus === 'accepted').length;
                   return (
                     <button key={f.id} className="form-tab" onClick={() => setActiveFormId(f.id)} style={{
                       width: '100%', textAlign: 'left', padding: '10px 12px', marginBottom: 4,
@@ -475,13 +523,21 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                         <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: active ? '#2563eb' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {f.name}
                         </span>
-                        <span style={{ display: 'block', fontSize: 11, color: '#94a3b8' }}>
-                          {f.fields.length} field{f.fields.length !== 1 ? 's' : ''}
+                        <span style={{ display: 'block', fontSize: 11, color: status === 'accepted' ? '#15803d' : status === 'rejected' ? '#b91c1c' : '#b45309' }}>
+                          {approvedCount}/{f.fields.length} approved
                         </span>
                       </span>
+                      {/* RAG status dot: green all approved, amber pending, red rejected */}
+                      <span title={status === 'accepted' ? 'All fields approved' : status === 'rejected' ? 'Has rejected fields' : 'Pending review'}
+                        style={{ width: 9, height: 9, borderRadius: '50%', background: RAG[status], flexShrink: 0 }} />
                     </button>
                   );
                 })}
+                {reviewFilter !== 'all' && (activeVisit?.forms ?? []).every(f => !f.fields.some(x => x.reviewStatus === reviewFilter)) && (
+                  <p style={{ fontSize: 12, color: '#94a3b8', padding: '4px 8px', fontStyle: 'italic' }}>
+                    No forms with {reviewFilter === 'accepted' ? 'approved' : reviewFilter} fields in this visit.
+                  </p>
+                )}
                 {activeVisit && (
                   <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <button className="lift" onClick={() => addForm(activeVisit.id)} style={{
@@ -525,6 +581,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                   {activeForm ? (
                     <FormBlock
                       form={activeForm}
+                      filter={reviewFilter}
                       onField={mutateField}
                       onRule={setRuleAccepted}
                       onFormReview={setFormReview}
@@ -580,6 +637,18 @@ function CounterChip({ label, value, color }: { label: string; value: number; co
   );
 }
 
+// RAG palette shared by field cards, form list dots, and filter chips.
+const RAG: Record<ReviewStatus, string> = { accepted: '#22c55e', pending: '#f59e0b', rejected: '#ef4444' };
+
+// A form's aggregate review status: red if anything is rejected, green when
+// every field is approved, amber while anything is still pending.
+function formReviewStatus(f: StudyForm): ReviewStatus {
+  if (!f.fields.length) return 'pending';
+  if (f.fields.some(x => x.reviewStatus === 'rejected')) return 'rejected';
+  if (f.fields.every(x => x.reviewStatus === 'accepted')) return 'accepted';
+  return 'pending';
+}
+
 // Group a form's fields into ordered sections (preserving first-seen order) so
 // the questionnaire renders as titled subsections. Fields with no section fall
 // into a single leading unlabeled group.
@@ -598,8 +667,9 @@ function groupFieldsBySection(fields: StudyField[]): { key: string; section: str
   }));
 }
 
-function FormBlock({ form, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm }: {
+function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm }: {
   form: StudyForm;
+  filter: 'all' | ReviewStatus;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
   onRule: (formId: string, ruleId: string, accepted: boolean) => void;
   onFormReview: (formId: string, status: ReviewStatus) => void;
@@ -611,6 +681,8 @@ function FormBlock({ form, onField, onRule, onFormReview, onEditField, onAddFiel
   onDeleteForm: () => void;
 }) {
   const [showPrompt, setShowPrompt] = useState(false);
+  const visibleFields = filter === 'all' ? form.fields : form.fields.filter(f => f.reviewStatus === filter);
+  const hiddenCount = form.fields.length - visibleFields.length;
   return (
     <div style={{
       border: '1px solid #e2e8f0', borderRadius: 14, marginBottom: 18, overflow: 'hidden',
@@ -673,7 +745,12 @@ function FormBlock({ form, onField, onRule, onFormReview, onEditField, onAddFiel
       )}
 
       <div>
-        {groupFieldsBySection(form.fields).map((group, gi) => (
+        {hiddenCount > 0 && (
+          <p style={{ padding: '8px 18px', fontSize: 12, color: '#94a3b8', background: '#fafbfc', borderBottom: '1px solid #f1f5f9' }}>
+            {hiddenCount} field{hiddenCount !== 1 ? 's' : ''} hidden by the “{filter === 'accepted' ? 'Approved' : filter === 'pending' ? 'Pending' : 'Rejected'}” filter.
+          </p>
+        )}
+        {groupFieldsBySection(visibleFields).map((group, gi) => (
           <div key={group.key} className="anim-row" style={{ animationDelay: `${Math.min(gi * 55, 280)}ms` }}>
             {group.section && (
               <div style={{
@@ -809,11 +886,12 @@ function FieldCard({ field, onChange, onEdit }: {
 }) {
   const flagged = field.confidence === 'low' && field.reviewStatus === 'pending';
 
+  // RAG coding: green = approved, amber = pending action, red = rejected.
   const statusBg: Record<ReviewStatus, string> = {
-    pending: 'transparent', accepted: '#f0fdf4', rejected: '#fef2f2',
+    pending: '#fffdf4', accepted: '#f0fdf4', rejected: '#fef2f2',
   };
   const leftBar: Record<ReviewStatus, string> = {
-    pending: flagged ? '#f59e0b' : '#e2e8f0', accepted: '#22c55e', rejected: '#ef4444',
+    pending: '#f59e0b', accepted: '#22c55e', rejected: '#ef4444',
   };
 
   return (
