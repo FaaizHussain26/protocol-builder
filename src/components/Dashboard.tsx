@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Layers, FolderOpen, SlidersHorizontal, Sparkles, FileText,
-  Loader, AlertCircle, ArrowRight, ClipboardList, CalendarDays,
+  Loader, AlertCircle, ArrowRight, ClipboardList, CalendarDays, PenLine,
 } from 'lucide-react';
 import { listStudies, listTemplates, getStudy, isConfigured } from '../utils/api';
 import type { StudyModel, StudySummary, Template } from '../types/study';
@@ -10,11 +10,12 @@ interface DashboardProps {
   onNewBuild: () => void;
   onOpenStudy: (study: StudyModel, id: string) => void;
   onOpenLibrary: () => void;
+  onOpenDrafts: () => void;
   onOpenTemplates: () => void;
 }
 
 // Workspace home: totals across all saved data + recent eSources + quick actions.
-export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOpenTemplates }: DashboardProps) {
+export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOpenDrafts, onOpenTemplates }: DashboardProps) {
   const [studies, setStudies] = useState<StudySummary[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(isConfigured);
@@ -34,6 +35,8 @@ export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOp
     return () => { alive = false; };
   }, []);
 
+  const finals = studies.filter((s) => s.status === 'final');
+  const drafts = studies.filter((s) => s.status !== 'final');
   const totalFields = studies.reduce((a, s) => a + s.fieldCount, 0);
   const totalVisits = studies.reduce((a, s) => a + s.visitCount, 0);
   const recent = studies.slice(0, 5); // list arrives sorted by updatedAt desc
@@ -70,8 +73,9 @@ export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOp
       )}
 
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 22 }}>
-        <StatCard icon={<FolderOpen size={17} />} tint="#2563eb" label="Saved E-Sources" value={studies.length} loading={loading} onClick={onOpenLibrary} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 22 }}>
+        <StatCard icon={<FolderOpen size={17} />} tint="#16a34a" label="Saved E-Sources" value={finals.length} loading={loading} onClick={onOpenLibrary} />
+        <StatCard icon={<PenLine size={17} />} tint="#f59e0b" label="Drafts in review" value={drafts.length} loading={loading} onClick={onOpenDrafts} />
         <StatCard icon={<ClipboardList size={17} />} tint="#7c3aed" label="Fields across builds" value={totalFields} loading={loading} />
         <StatCard icon={<CalendarDays size={17} />} tint="#f26a1b" label="Visits scheduled" value={totalVisits} loading={loading} />
         <StatCard icon={<SlidersHorizontal size={17} />} tint="#0d9488" label="Preference templates" value={templates.length} loading={loading} onClick={onOpenTemplates} />
