@@ -322,6 +322,7 @@ export default function App() {
             studyId={currentStudyId}
             protocolText={corpusText}
             onStudyIdChange={setCurrentStudyId}
+            autoSaveEnabled={CONFIGURED && !DEMO_MODE}
             tab={studyTab}
             onTabChange={setStudyTab}
           />

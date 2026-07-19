@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
   Check, X, Pencil, FlaskConical, ListChecks, Plus,
   PenLine, Upload, FileText, CircleDot, Save, Trash2, RefreshCw, Copy,
+  ChevronUp, ChevronDown, GripVertical,
 } from 'lucide-react';
 import type {
   StudyModel, StudyField, StudyForm, StudyVisit, ReviewStatus,
@@ -77,6 +78,13 @@ const visitCtlBtn: React.CSSProperties = {
   background: '#fff', color: '#64748b', cursor: 'pointer', flexShrink: 0,
 };
 
+const reorderBtn = (disabled: boolean): React.CSSProperties => ({
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  width: 20, height: 16, borderRadius: 5, border: '1px solid #e2e8f0',
+  background: '#fff', color: disabled ? '#cbd5e1' : '#64748b',
+  cursor: disabled ? 'default' : 'pointer', padding: 0, flexShrink: 0,
+});
+
 interface StudyBuilderProps {
   study: StudyModel;
   setStudy: (s: StudyModel) => void;
@@ -87,6 +95,8 @@ interface StudyBuilderProps {
   protocolText?: string;
   /** Called with the new id after a first save. */
   onStudyIdChange?: (id: string) => void;
+  /** Debounced auto-save (as a draft) when the study changes. */
+  autoSaveEnabled?: boolean;
   /** Controlled section — when provided (by the app sidebar), the internal tab bar is hidden. */
   tab?: Tab;
   onTabChange?: (t: Tab) => void;
@@ -94,7 +104,7 @@ interface StudyBuilderProps {
 
 export type Tab = 'build' | 'eligibility' | 'intelligence' | 'export';
 
-export default function StudyBuilder({ study, setStudy, onReset, studyId, protocolText, onStudyIdChange, tab: controlledTab, onTabChange }: StudyBuilderProps) {
+export default function StudyBuilder({ study, setStudy, onReset, studyId, protocolText, onStudyIdChange, autoSaveEnabled, tab: controlledTab, onTabChange }: StudyBuilderProps) {
   const [internalTab, setInternalTab] = useState<Tab>('build');
   const tab = controlledTab ?? internalTab;
   const setTab = onTabChange ?? setInternalTab;
@@ -104,6 +114,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   const [regenId, setRegenId] = useState<string | null>(null);
   const [saving, setSaving] = useState<'draft' | 'final' | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [autoMsg, setAutoMsg] = useState<string | null>(null);
   // Review filter: narrows the forms list and the visible fields by status.
   const [reviewFilter, setReviewFilter] = useState<'all' | ReviewStatus>('all');
 
@@ -113,6 +124,20 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
   }, [activeFormId, activeVisitId, tab]);
+
+  // ---- Auto-save plumbing ----
+  // studyRef always holds the latest study (so a queued save uses fresh data);
+  // savedIdRef is the id of the persisted study, shared by manual + auto save so
+  // neither ever creates a duplicate before the studyId prop round-trips.
+  const studyRef = useRef(study);
+  studyRef.current = study;
+  const savingRef = useRef(false);
+  const pendingRef = useRef(false);
+  const firstAutoRun = useRef(true);
+  const savedIdRef = useRef<string | undefined>(studyId);
+  useEffect(() => { savedIdRef.current = studyId; }, [studyId]);
+  // Id of the form currently being dragged in the forms side-menu.
+  const dragFormId = useRef<string | null>(null);
 
   // ---- Derived counts ----
   const stats = useMemo(() => {
@@ -257,6 +282,39 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   const updateForm = (formId: string, patch: Partial<StudyForm>) =>
     setStudy({ ...study, visits: study.visits.map(v => ({ ...v, forms: v.forms.map(f => f.id !== formId ? f : { ...f, ...patch }) })) });
 
+  // ---- Manual form ordering (up/down + drag-and-drop) ----
+  // Swap a form with its neighbor within the visit.
+  const moveForm = (visitId: string, formId: string, dir: -1 | 1) =>
+    setStudy({
+      ...study,
+      visits: study.visits.map(v => {
+        if (v.id !== visitId) return v;
+        const forms = [...v.forms];
+        const i = forms.findIndex(f => f.id === formId);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= forms.length) return v;
+        [forms[i], forms[j]] = [forms[j], forms[i]];
+        return { ...v, forms };
+      }),
+    });
+  // Move a dragged form to the drop target's position within the visit.
+  const reorderForms = (visitId: string, fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    setStudy({
+      ...study,
+      visits: study.visits.map(v => {
+        if (v.id !== visitId) return v;
+        const forms = [...v.forms];
+        const from = forms.findIndex(f => f.id === fromId);
+        const to = forms.findIndex(f => f.id === toId);
+        if (from < 0 || to < 0) return v;
+        const [moved] = forms.splice(from, 1);
+        forms.splice(to, 0, moved);
+        return { ...v, forms };
+      }),
+    });
+  };
+
   // Duplicate a form within the same visit (inserted right after the source).
   const duplicateForm = (visitId: string, formId: string) => {
     const src = study.visits.find(v => v.id === visitId)?.forms.find(f => f.id === formId);
@@ -316,8 +374,8 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     setSaving(status);
     setSaveMsg(null);
     try {
-      const saved = await saveStudy({ ...study, status }, studyId);
-      if (saved.id && saved.id !== studyId) onStudyIdChange?.(saved.id);
+      const saved = await saveStudy({ ...study, status }, savedIdRef.current ?? studyId);
+      if (saved.id) { savedIdRef.current = saved.id; if (saved.id !== studyId) onStudyIdChange?.(saved.id); }
       setStudy(saved);
       setSaveMsg(status === 'final' ? 'Saved to E-Sources' : 'Draft saved');
     } catch (e) {
@@ -326,6 +384,33 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
       setSaving(null);
     }
   };
+
+  // Debounced auto-save — always writes a DRAFT (no approval gate). Coalesces
+  // rapid edits and never overwrites the in-memory study with the server copy,
+  // so the user's in-flight edits are never lost.
+  const runAutoSave = useCallback(async () => {
+    if (savingRef.current) { pendingRef.current = true; return; }
+    savingRef.current = true;
+    setAutoMsg('Saving…');
+    try {
+      const s = studyRef.current;
+      const saved = await saveStudy({ ...s, status: s.status === 'final' ? 'final' : 'draft' }, savedIdRef.current);
+      if (saved.id) { savedIdRef.current = saved.id; onStudyIdChange?.(saved.id); }
+      setAutoMsg('Auto-saved');
+    } catch {
+      setAutoMsg('Auto-save failed');
+    } finally {
+      savingRef.current = false;
+      if (pendingRef.current) { pendingRef.current = false; void runAutoSave(); }
+    }
+  }, [onStudyIdChange]);
+
+  useEffect(() => {
+    if (!autoSaveEnabled) return;
+    if (firstAutoRun.current) { firstAutoRun.current = false; return; } // skip the initial load
+    const t = window.setTimeout(() => { void runAutoSave(); }, 1500);
+    return () => window.clearTimeout(t);
+  }, [study, autoSaveEnabled, runAutoSave]);
 
   const activeVisit = study.visits.find(v => v.id === activeVisitId) ?? study.visits[0];
   // Active form within the selected visit; falls back to the first form so a
@@ -369,9 +454,12 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            {saveMsg && (
-              <span style={{ fontSize: 12, fontWeight: 600, color: saveMsg === 'Saved' ? '#4ade80' : '#fca5a5' }}>{saveMsg}</span>
-            )}
+            {(() => {
+              const msg = saveMsg ?? autoMsg;
+              if (!msg) return null;
+              const color = /fail/i.test(msg) ? '#fca5a5' : msg === 'Saving…' ? '#cbd5e1' : '#4ade80';
+              return <span style={{ fontSize: 12, fontWeight: 600, color }}>{msg}</span>;
+            })()}
             <button onClick={approveAll} disabled={stats.pending === 0 && stats.rejected === 0} className="lift" style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
               borderRadius: 9, border: '1px solid rgba(74,222,128,0.45)',
@@ -556,32 +644,54 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                 </p>
                 {(activeVisit?.forms ?? [])
                   .filter(f => reviewFilter === 'all' || f.fields.some(x => x.reviewStatus === reviewFilter))
-                  .map(f => {
+                  .map((f, idx, arr) => {
                   const active = f.id === activeForm?.id;
                   const status = formReviewStatus(f);
                   const approvedCount = f.fields.filter(x => x.reviewStatus === 'accepted').length;
+                  // Reorder only in the unfiltered list, where index === true order.
+                  const canReorder = reviewFilter === 'all' && !!activeVisit;
                   return (
-                    <button key={f.id} className="form-tab" onClick={() => setActiveFormId(f.id)} style={{
-                      width: '100%', textAlign: 'left', padding: '10px 12px', marginBottom: 4,
-                      borderRadius: 9, border: 'none', cursor: 'pointer',
-                      background: active ? '#eff6ff' : 'transparent',
-                      display: 'flex', alignItems: 'center', gap: 9,
-                    }}>
-                      <span style={{ color: active ? '#2563eb' : '#94a3b8', flexShrink: 0 }}>
-                        {f.appliedTemplate ? <CircleDot size={15} /> : <FileText size={15} />}
-                      </span>
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: active ? '#2563eb' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {f.name}
+                    <div
+                      key={f.id}
+                      draggable={canReorder}
+                      onDragStart={() => { dragFormId.current = f.id; }}
+                      onDragOver={e => { if (canReorder) e.preventDefault(); }}
+                      onDrop={e => { e.preventDefault(); if (canReorder && dragFormId.current && activeVisit) reorderForms(activeVisit.id, dragFormId.current, f.id); dragFormId.current = null; }}
+                      onDragEnd={() => { dragFormId.current = null; }}
+                      style={{ display: 'flex', alignItems: 'stretch', gap: 2, marginBottom: 4, borderRadius: 9, background: active ? '#eff6ff' : 'transparent' }}
+                    >
+                      {canReorder && (
+                        <span title="Drag to reorder" style={{ display: 'flex', alignItems: 'center', color: '#cbd5e1', cursor: 'grab', paddingLeft: 3 }}>
+                          <GripVertical size={13} />
                         </span>
-                        <span style={{ display: 'block', fontSize: 11, color: status === 'accepted' ? '#15803d' : status === 'rejected' ? '#b91c1c' : '#b45309' }}>
-                          {approvedCount}/{f.fields.length} approved
+                      )}
+                      <button className="form-tab" onClick={() => setActiveFormId(f.id)} style={{
+                        flex: 1, minWidth: 0, textAlign: 'left', padding: '10px 10px',
+                        borderRadius: 9, border: 'none', cursor: 'pointer', background: 'transparent',
+                        display: 'flex', alignItems: 'center', gap: 9,
+                      }}>
+                        <span style={{ color: active ? '#2563eb' : '#94a3b8', flexShrink: 0 }}>
+                          {f.appliedTemplate ? <CircleDot size={15} /> : <FileText size={15} />}
                         </span>
-                      </span>
-                      {/* RAG status dot: green all approved, amber pending, red rejected */}
-                      <span title={status === 'accepted' ? 'All fields approved' : status === 'rejected' ? 'Has rejected fields' : 'Pending review'}
-                        style={{ width: 9, height: 9, borderRadius: '50%', background: RAG[status], flexShrink: 0 }} />
-                    </button>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: active ? '#2563eb' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {f.name}
+                          </span>
+                          <span style={{ display: 'block', fontSize: 11, color: status === 'accepted' ? '#15803d' : status === 'rejected' ? '#b91c1c' : '#b45309' }}>
+                            {approvedCount}/{f.fields.length} approved
+                          </span>
+                        </span>
+                        {/* RAG status dot: green all approved, amber pending, red rejected */}
+                        <span title={status === 'accepted' ? 'All fields approved' : status === 'rejected' ? 'Has rejected fields' : 'Pending review'}
+                          style={{ width: 9, height: 9, borderRadius: '50%', background: RAG[status], flexShrink: 0 }} />
+                      </button>
+                      {canReorder && (
+                        <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1, paddingRight: 2 }}>
+                          <button className="lift" title="Move up" disabled={idx === 0} onClick={() => activeVisit && moveForm(activeVisit.id, f.id, -1)} style={reorderBtn(idx === 0)}><ChevronUp size={12} /></button>
+                          <button className="lift" title="Move down" disabled={idx === arr.length - 1} onClick={() => activeVisit && moveForm(activeVisit.id, f.id, 1)} style={reorderBtn(idx === arr.length - 1)}><ChevronDown size={12} /></button>
+                        </span>
+                      )}
+                    </div>
                   );
                 })}
                 {reviewFilter !== 'all' && (activeVisit?.forms ?? []).every(f => !f.fields.some(x => x.reviewStatus === reviewFilter)) && (
