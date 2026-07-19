@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
   Check, X, Pencil, FlaskConical, ListChecks, Plus,
-  PenLine, Upload, FileText, CircleDot, Save, Trash2, RefreshCw,
+  PenLine, Upload, FileText, CircleDot, Save, Trash2, RefreshCw, Copy,
 } from 'lucide-react';
 import type {
   StudyModel, StudyField, StudyForm, StudyVisit, ReviewStatus,
@@ -47,6 +47,28 @@ let newVisitCounter = 0;
 function blankVisit(): StudyVisit {
   newVisitCounter += 1;
   return { id: `new-visit-${Date.now()}-${newVisitCounter}`, name: 'New Visit', kind: 'visit', forms: [] };
+}
+
+// Deep-copy a form with FRESH ids for the form and every field/rule/alert. This
+// is essential: reusing the source ids would make the form mutators (which match
+// by id) act on both copies — the bug where saving/editing "deletes" the original.
+let cloneCounter = 0;
+function cloneForm(src: StudyForm, nameSuffix = ' (copy)'): StudyForm {
+  cloneCounter += 1;
+  const stamp = `${Date.now()}-${cloneCounter}`;
+  return {
+    ...src,
+    id: `form-copy-${stamp}`,
+    name: `${src.name}${nameSuffix}`,
+    fields: src.fields.map((f, i) => {
+      // Drop learning metadata — a copy is not itself a user edit of the original.
+      const { editedByUser, aiOriginal, ...rest } = f;
+      void editedByUser; void aiOriginal;
+      return { ...rest, id: `fld-copy-${stamp}-${i}`, reviewStatus: 'pending' as ReviewStatus };
+    }),
+    rules: src.rules.map((r, i) => ({ ...r, id: `rule-copy-${stamp}-${i}`, accepted: null })),
+    alerts: src.alerts?.map((a, i) => ({ ...a, id: `alert-copy-${stamp}-${i}` })),
+  };
 }
 
 const visitCtlBtn: React.CSSProperties = {
@@ -234,6 +256,35 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     setStudy({ ...study, visits: study.visits.map(v => v.id !== visitId ? v : { ...v, forms: v.forms.filter(f => f.id !== formId) }) });
   const updateForm = (formId: string, patch: Partial<StudyForm>) =>
     setStudy({ ...study, visits: study.visits.map(v => ({ ...v, forms: v.forms.map(f => f.id !== formId ? f : { ...f, ...patch }) })) });
+
+  // Duplicate a form within the same visit (inserted right after the source).
+  const duplicateForm = (visitId: string, formId: string) => {
+    const src = study.visits.find(v => v.id === visitId)?.forms.find(f => f.id === formId);
+    if (!src) return;
+    const copy = cloneForm(src);
+    setStudy({
+      ...study,
+      visits: study.visits.map(v => {
+        if (v.id !== visitId) return v;
+        const i = v.forms.findIndex(f => f.id === formId);
+        return { ...v, forms: [...v.forms.slice(0, i + 1), copy, ...v.forms.slice(i + 1)] };
+      }),
+    });
+    setActiveFormId(copy.id);
+  };
+
+  // Copy a form from any other visit into the target visit (keeps its name).
+  const copyFormFrom = (sourceVisitId: string, sourceFormId: string, targetVisitId: string) => {
+    const src = study.visits.find(v => v.id === sourceVisitId)?.forms.find(f => f.id === sourceFormId);
+    if (!src) return;
+    const copy = cloneForm(src, '');
+    setStudy({
+      ...study,
+      visits: study.visits.map(v => v.id !== targetVisitId ? v : { ...v, forms: [...v.forms, copy] }),
+    });
+    setActiveVisitId(targetVisitId);
+    setActiveFormId(copy.id);
+  };
 
   // Re-run enrichment for one form using its per-form prompt.
   const handleRegenerate = async (form: StudyForm) => {
@@ -558,6 +609,23 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       <option value="">+ Add standard form…</option>
                       {ALL_STANDARD_NAMES.map(n => <option key={n} value={n}>{n}</option>)}
                     </select>
+                    {study.visits.some(v => v.id !== activeVisit.id && v.forms.length > 0) && (
+                      <select
+                        value=""
+                        onChange={e => { if (e.target.value && activeVisit) { const [sv, sf] = e.target.value.split('::'); copyFormFrom(sv, sf, activeVisit.id); e.currentTarget.value = ''; } }}
+                        style={{
+                          width: '100%', padding: '9px', borderRadius: 9, border: '1px solid #e2e8f0',
+                          background: '#fff', fontSize: 12.5, color: '#475569', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        <option value="">+ Copy form from another visit…</option>
+                        {study.visits.filter(v => v.id !== activeVisit.id && v.forms.length > 0).map(v => (
+                          <optgroup key={v.id} label={v.name}>
+                            {v.forms.map(f => <option key={f.id} value={`${v.id}::${f.id}`}>{f.name}</option>)}
+                          </optgroup>
+                        ))}
+                      </select>
+                    )}
                     {/screen/i.test(activeVisit.name) && (
                       <button className="lift" onClick={() => sortFormsStandard(activeVisit.id)} style={{
                         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -591,6 +659,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       onRegenerate={handleRegenerate}
                       regenerating={regenId === activeForm.id}
                       onDeleteForm={() => activeVisit && removeForm(activeVisit.id, activeForm.id)}
+                      onDuplicateForm={() => activeVisit && duplicateForm(activeVisit.id, activeForm.id)}
                     />
                   ) : (
                     <p style={{ color: '#94a3b8', fontSize: 13 }}>This visit has no forms yet. Use “Add form” to create one.</p>
@@ -667,7 +736,7 @@ function groupFieldsBySection(fields: StudyField[]): { key: string; section: str
   }));
 }
 
-function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm }: {
+function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm }: {
   form: StudyForm;
   filter: 'all' | ReviewStatus;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
@@ -679,6 +748,7 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
   onRegenerate: (form: StudyForm) => void;
   regenerating: boolean;
   onDeleteForm: () => void;
+  onDuplicateForm: () => void;
 }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const visibleFields = filter === 'all' ? form.fields : form.fields.filter(f => f.reviewStatus === filter);
@@ -703,6 +773,7 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
           <button className="lift" title="Customize prompt / regenerate" onClick={() => setShowPrompt(s => !s)} style={visitCtlBtn}>
             <RefreshCw size={13} color={showPrompt ? '#2563eb' : '#64748b'} />
           </button>
+          <button className="lift" title="Duplicate form" onClick={onDuplicateForm} style={visitCtlBtn}><Copy size={13} /></button>
           <button className="lift" title="Rename form" onClick={() => {
             const n = window.prompt('Rename form', form.name);
             if (n && n.trim()) onUpdateForm(form.id, { name: n.trim() });
