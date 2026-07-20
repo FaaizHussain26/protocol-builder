@@ -853,6 +853,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       onMoveField={moveFieldInSection}
                       onMoveSection={moveSection}
                       onDuplicateField={duplicateField}
+                      onDeleteField={(formId, fieldId) => { if (window.confirm('Delete this field?')) deleteField(formId, fieldId); }}
                     />
                   ) : (
                     <p style={{ color: '#94a3b8', fontSize: 13 }}>This visit has no forms yet. Use “Add form” to create one.</p>
@@ -935,7 +936,7 @@ function groupFieldsBySection(fields: StudyField[]): { key: string; section: str
   }));
 }
 
-function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onMoveField, onMoveSection, onDuplicateField }: {
+function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onMoveField, onMoveSection, onDuplicateField, onDeleteField }: {
   form: StudyForm;
   filter: 'all' | ReviewStatus;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
@@ -951,6 +952,7 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
   onMoveField: (formId: string, fieldId: string, dir: -1 | 1) => void;
   onMoveSection: (formId: string, section: string | null, dir: -1 | 1) => void;
   onDuplicateField: (formId: string, fieldId: string) => void;
+  onDeleteField: (formId: string, fieldId: string) => void;
 }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const visibleFields = filter === 'all' ? form.fields : form.fields.filter(f => f.reviewStatus === filter);
@@ -1055,6 +1057,7 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
                 onChange={patch => onField(form.id, field.id, patch)}
                 onEdit={() => onEditField(form.id, field)}
                 onDuplicate={() => onDuplicateField(form.id, field.id)}
+                onDelete={() => onDeleteField(form.id, field.id)}
                 canReorder={canReorder}
                 isFirst={fi === 0}
                 isLast={fi === farr.length - 1}
@@ -1169,11 +1172,12 @@ function FormAlerts({ form, onUpdateForm }: { form: StudyForm; onUpdateForm: (fo
   );
 }
 
-function FieldCard({ field, onChange, onEdit, onDuplicate, canReorder, isFirst, isLast, onMoveUp, onMoveDown }: {
+function FieldCard({ field, onChange, onEdit, onDuplicate, onDelete, canReorder, isFirst, isLast, onMoveUp, onMoveDown }: {
   field: StudyField;
   onChange: (patch: Partial<StudyField>) => void;
   onEdit: () => void;
   onDuplicate?: () => void;
+  onDelete?: () => void;
   canReorder?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
@@ -1252,6 +1256,14 @@ function FieldCard({ field, onChange, onEdit, onDuplicate, canReorder, isFirst, 
           {onDuplicate && <SmallBtn active={false} onClick={onDuplicate}><Copy size={13} /> Copy</SmallBtn>}
           <SmallBtn active={field.reviewStatus === 'rejected'} activeBg="#fee2e2" activeFg="#b91c1c"
             onClick={() => onChange({ reviewStatus: 'rejected' })}><X size={13} /> Reject</SmallBtn>
+          {onDelete && (
+            <button onClick={onDelete} className="lift" title="Delete field" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'center',
+              padding: '6px 11px', borderRadius: 7, cursor: 'pointer',
+              border: '1px solid #fecaca', background: '#fff', color: '#dc2626',
+              fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', minWidth: 78,
+            }}><Trash2 size={13} /> Delete</button>
+          )}
         </div>
       </div>
     </div>
