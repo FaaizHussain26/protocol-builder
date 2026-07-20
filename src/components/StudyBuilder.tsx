@@ -356,20 +356,27 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   };
 
   // ---- Manual field & section ordering within a form ----
-  // Move a question up/down among the fields that share its section.
-  const moveFieldInSection = (formId: string, fieldId: string, dir: -1 | 1) =>
+  // Move a question up/down through the whole form. Within a section it just
+  // reorders; when it crosses a section boundary it MOVES INTO the adjacent
+  // section (adopting that section's name).
+  const moveField = (formId: string, fieldId: string, dir: -1 | 1) =>
     mapFormFields(formId, fields => {
-      const arr = [...fields];
-      const target = arr.find(f => f.id === fieldId);
-      if (!target) return arr;
-      const sec = target.section?.trim() || null;
-      const sameSec = arr.map((f, idx) => ({ f, idx })).filter(x => (x.f.section?.trim() || null) === sec);
-      const pos = sameSec.findIndex(x => x.f.id === fieldId);
-      const swap = sameSec[pos + dir];
-      if (!swap) return arr;
-      const a = sameSec[pos].idx, b = swap.idx;
-      [arr[a], arr[b]] = [arr[b], arr[a]];
-      return arr;
+      const groups = groupFieldsBySection(fields);
+      const ordered = groups.flatMap(g => g.fields.map(f => f.id));
+      const secById = new Map<string, string | null>();
+      groups.forEach(g => g.fields.forEach(f => secById.set(f.id, g.section)));
+      const p = ordered.indexOf(fieldId);
+      const q = p + dir;
+      if (p < 0 || q < 0 || q >= ordered.length) return fields;
+      const targetSection = secById.get(ordered[q]) ?? null; // section being entered
+      const ids = [...ordered];
+      ids.splice(p, 1);
+      ids.splice(q, 0, fieldId);
+      const byId = new Map(fields.map(f => [f.id, f]));
+      return ids.map(id => {
+        const f = byId.get(id)!;
+        return id === fieldId ? { ...f, section: targetSection ?? undefined } : f;
+      });
     });
   // Move an entire section (its block of fields) above/below the adjacent section.
   const moveSection = (formId: string, section: string | null, dir: -1 | 1) =>
@@ -850,7 +857,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       regenerating={regenId === activeForm.id}
                       onDeleteForm={() => activeVisit && removeForm(activeVisit.id, activeForm.id)}
                       onDuplicateForm={() => activeVisit && duplicateForm(activeVisit.id, activeForm.id)}
-                      onMoveField={moveFieldInSection}
+                      onMoveField={moveField}
                       onMoveSection={moveSection}
                       onDuplicateField={duplicateField}
                       onDeleteField={(formId, fieldId) => { if (window.confirm('Delete this field?')) deleteField(formId, fieldId); }}
@@ -1029,6 +1036,9 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
           // Reorder only in the unfiltered view, where index === true order.
           const canReorder = filter === 'all';
           const groups = groupFieldsBySection(visibleFields);
+          // Global render order — field up/down crosses section boundaries, so
+          // first/last are relative to the whole form, not the section.
+          const orderedIds = groups.flatMap(g => g.fields.map(f => f.id));
           return groups.map((group, gi) => (
           <div key={group.key} className="anim-row" style={{ animationDelay: `${Math.min(gi * 55, 280)}ms` }}>
             {group.section && (
@@ -1052,15 +1062,15 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
                 )}
               </div>
             )}
-            {group.fields.map((field, fi, farr) => (
+            {group.fields.map(field => (
               <FieldCard key={field.id} field={field}
                 onChange={patch => onField(form.id, field.id, patch)}
                 onEdit={() => onEditField(form.id, field)}
                 onDuplicate={() => onDuplicateField(form.id, field.id)}
                 onDelete={() => onDeleteField(form.id, field.id)}
                 canReorder={canReorder}
-                isFirst={fi === 0}
-                isLast={fi === farr.length - 1}
+                isFirst={orderedIds.indexOf(field.id) === 0}
+                isLast={orderedIds.indexOf(field.id) === orderedIds.length - 1}
                 onMoveUp={() => onMoveField(form.id, field.id, -1)}
                 onMoveDown={() => onMoveField(form.id, field.id, 1)} />
             ))}
