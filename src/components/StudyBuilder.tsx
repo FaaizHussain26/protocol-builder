@@ -3,7 +3,7 @@ import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
   Check, X, Pencil, FlaskConical, ListChecks, Plus,
   PenLine, Upload, FileText, CircleDot, Save, Trash2, RefreshCw, Copy,
-  ChevronUp, ChevronDown, GripVertical,
+  ChevronUp, ChevronDown, GripVertical, ArrowDownUp, Split,
 } from 'lucide-react';
 import type {
   StudyModel, StudyField, StudyForm, StudyVisit, ReviewStatus,
@@ -264,6 +264,20 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     setEditTarget(null);
   };
 
+  // Copy a single input, inserted right after the original (fresh id, pending).
+  const duplicateField = (formId: string, fieldId: string) =>
+    mapFormFields(formId, fields => {
+      const i = fields.findIndex(f => f.id === fieldId);
+      if (i < 0) return fields;
+      const { editedByUser, aiOriginal, ...rest } = fields[i];
+      void editedByUser; void aiOriginal;
+      newFieldCounter += 1;
+      const copy: StudyField = { ...rest, id: `fld-copy-${Date.now()}-${newFieldCounter}`, label: `${rest.label} (copy)`, reviewStatus: 'pending' };
+      const next = [...fields];
+      next.splice(i + 1, 0, copy);
+      return next;
+    });
+
   const openEdit = (formId: string, field: StudyField) => setEditTarget({ formId, field, isNew: false });
   const openAdd = (formId: string) => setEditTarget({ formId, field: blankField(), isNew: true });
 
@@ -290,6 +304,11 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     [visits[i], visits[j]] = [visits[j], visits[i]];
     setStudy({ ...study, visits });
   };
+
+  // One-click chronological sort (by study day, then week; logs last). Optional —
+  // the dropdown otherwise follows the manual order set via the up/down controls.
+  const sortVisitsChronologically = () =>
+    setStudy({ ...study, visits: [...study.visits].sort((a, b) => visitSortKey(a) - visitSortKey(b)) });
 
   const addForm = (visitId: string, name?: string) => {
     const f = { ...blankForm(), name: name || 'New Form' };
@@ -335,6 +354,33 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
       }),
     });
   };
+
+  // ---- Manual field & section ordering within a form ----
+  // Move a question up/down among the fields that share its section.
+  const moveFieldInSection = (formId: string, fieldId: string, dir: -1 | 1) =>
+    mapFormFields(formId, fields => {
+      const arr = [...fields];
+      const target = arr.find(f => f.id === fieldId);
+      if (!target) return arr;
+      const sec = target.section?.trim() || null;
+      const sameSec = arr.map((f, idx) => ({ f, idx })).filter(x => (x.f.section?.trim() || null) === sec);
+      const pos = sameSec.findIndex(x => x.f.id === fieldId);
+      const swap = sameSec[pos + dir];
+      if (!swap) return arr;
+      const a = sameSec[pos].idx, b = swap.idx;
+      [arr[a], arr[b]] = [arr[b], arr[a]];
+      return arr;
+    });
+  // Move an entire section (its block of fields) above/below the adjacent section.
+  const moveSection = (formId: string, section: string | null, dir: -1 | 1) =>
+    mapFormFields(formId, fields => {
+      const groups = groupFieldsBySection(fields);
+      const i = groups.findIndex(g => g.section === section);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= groups.length) return fields;
+      [groups[i], groups[j]] = [groups[j], groups[i]];
+      return groups.flatMap(g => g.fields);
+    });
 
   // Duplicate a form within the same visit (inserted right after the source).
   const duplicateForm = (visitId: string, formId: string) => {
@@ -598,7 +644,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                   fontFamily: 'inherit', cursor: 'pointer', minWidth: 280, maxWidth: '100%',
                 }}
               >
-                {[...study.visits].sort((a, b) => visitSortKey(a) - visitSortKey(b)).map(v => (
+                {study.visits.map(v => (
                   <option key={v.id} value={v.id}>
                     {v.name}{v.timing ? ` — ${v.timing}` : ''}{v.kind === 'log' ? ' (log)' : ''}
                   </option>
@@ -655,6 +701,11 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                   </>
                   );
                 })()}
+                {study.visits.length > 1 && (
+                  <button className="lift" title="Sort visits by study day" onClick={sortVisitsChronologically} style={visitCtlBtn}>
+                    <ArrowDownUp size={14} />
+                  </button>
+                )}
                 <button className="lift" onClick={addVisit} style={{ ...visitCtlBtn, color: '#2563eb', borderColor: '#bfdbfe', width: 'auto', padding: '0 11px', gap: 6, fontWeight: 600, fontSize: 12.5 }}>
                   <Plus size={14} /> Visit
                 </button>
@@ -799,6 +850,9 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       regenerating={regenId === activeForm.id}
                       onDeleteForm={() => activeVisit && removeForm(activeVisit.id, activeForm.id)}
                       onDuplicateForm={() => activeVisit && duplicateForm(activeVisit.id, activeForm.id)}
+                      onMoveField={moveFieldInSection}
+                      onMoveSection={moveSection}
+                      onDuplicateField={duplicateField}
                     />
                   ) : (
                     <p style={{ color: '#94a3b8', fontSize: 13 }}>This visit has no forms yet. Use “Add form” to create one.</p>
@@ -825,6 +879,12 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
       <FieldEditorDrawer
         field={editTarget?.field ?? null}
         isNew={editTarget?.isNew ?? false}
+        siblingFields={
+          editTarget
+            ? (study.visits.flatMap(v => v.forms).find(f => f.id === editTarget.formId)?.fields ?? [])
+                .filter(f => f.id !== editTarget.field.id)
+            : []
+        }
         onSave={f => editTarget && saveField(editTarget.formId, f, editTarget.isNew)}
         onDelete={editTarget && !editTarget.isNew ? () => deleteField(editTarget.formId, editTarget.field.id) : undefined}
         onClose={() => setEditTarget(null)}
@@ -875,7 +935,7 @@ function groupFieldsBySection(fields: StudyField[]): { key: string; section: str
   }));
 }
 
-function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm }: {
+function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onMoveField, onMoveSection, onDuplicateField }: {
   form: StudyForm;
   filter: 'all' | ReviewStatus;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
@@ -888,6 +948,9 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
   regenerating: boolean;
   onDeleteForm: () => void;
   onDuplicateForm: () => void;
+  onMoveField: (formId: string, fieldId: string, dir: -1 | 1) => void;
+  onMoveSection: (formId: string, section: string | null, dir: -1 | 1) => void;
+  onDuplicateField: (formId: string, fieldId: string) => void;
 }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const visibleFields = filter === 'all' ? form.fields : form.fields.filter(f => f.reviewStatus === filter);
@@ -960,7 +1023,11 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
             {hiddenCount} field{hiddenCount !== 1 ? 's' : ''} hidden by the “{filter === 'accepted' ? 'Approved' : filter === 'pending' ? 'Pending' : 'Rejected'}” filter.
           </p>
         )}
-        {groupFieldsBySection(visibleFields).map((group, gi) => (
+        {(() => {
+          // Reorder only in the unfiltered view, where index === true order.
+          const canReorder = filter === 'all';
+          const groups = groupFieldsBySection(visibleFields);
+          return groups.map((group, gi) => (
           <div key={group.key} className="anim-row" style={{ animationDelay: `${Math.min(gi * 55, 280)}ms` }}>
             {group.section && (
               <div style={{
@@ -975,15 +1042,28 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
                 <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>
                   {group.fields.length} question{group.fields.length !== 1 ? 's' : ''}
                 </span>
+                {canReorder && (
+                  <span style={{ display: 'flex', gap: 4 }}>
+                    <button className="lift" title="Move section up" disabled={gi === 0} onClick={() => onMoveSection(form.id, group.section, -1)} style={reorderBtn(gi === 0)}><ChevronUp size={13} /></button>
+                    <button className="lift" title="Move section down" disabled={gi === groups.length - 1} onClick={() => onMoveSection(form.id, group.section, 1)} style={reorderBtn(gi === groups.length - 1)}><ChevronDown size={13} /></button>
+                  </span>
+                )}
               </div>
             )}
-            {group.fields.map(field => (
+            {group.fields.map((field, fi, farr) => (
               <FieldCard key={field.id} field={field}
                 onChange={patch => onField(form.id, field.id, patch)}
-                onEdit={() => onEditField(form.id, field)} />
+                onEdit={() => onEditField(form.id, field)}
+                onDuplicate={() => onDuplicateField(form.id, field.id)}
+                canReorder={canReorder}
+                isFirst={fi === 0}
+                isLast={fi === farr.length - 1}
+                onMoveUp={() => onMoveField(form.id, field.id, -1)}
+                onMoveDown={() => onMoveField(form.id, field.id, 1)} />
             ))}
           </div>
-        ))}
+          ));
+        })()}
       </div>
 
       {/* Add field */}
@@ -1089,10 +1169,16 @@ function FormAlerts({ form, onUpdateForm }: { form: StudyForm; onUpdateForm: (fo
   );
 }
 
-function FieldCard({ field, onChange, onEdit }: {
+function FieldCard({ field, onChange, onEdit, onDuplicate, canReorder, isFirst, isLast, onMoveUp, onMoveDown }: {
   field: StudyField;
   onChange: (patch: Partial<StudyField>) => void;
   onEdit: () => void;
+  onDuplicate?: () => void;
+  canReorder?: boolean;
+  isFirst?: boolean;
+  isLast?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }) {
   const flagged = field.confidence === 'low' && field.reviewStatus === 'pending';
 
@@ -1112,6 +1198,12 @@ function FieldCard({ field, onChange, onEdit }: {
       opacity: field.reviewStatus === 'rejected' ? 0.6 : 1,
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        {canReorder && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, paddingTop: 1 }}>
+            <button className="lift" title="Move question up" disabled={isFirst} onClick={onMoveUp} style={reorderBtn(!!isFirst)}><ChevronUp size={12} /></button>
+            <button className="lift" title="Move question down" disabled={isLast} onClick={onMoveDown} style={reorderBtn(!!isLast)}><ChevronDown size={12} /></button>
+          </div>
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: '#1e293b', lineHeight: 1.4 }}>
             {field.label}
@@ -1132,6 +1224,14 @@ function FieldCard({ field, onChange, onEdit }: {
             <TypeBadge type={field.type} />
             <ConfidenceBadge level={field.confidence} compact />
             {flagged && <Pill bg="#fffbeb" color="#b45309"><AlertTriangle size={11} /> Needs review</Pill>}
+            {field.alert && (
+              <Pill bg={ALERT_COLORS[field.alert.level].bg} color={ALERT_COLORS[field.alert.level].fg}>
+                <AlertTriangle size={11} /> {field.alert.message || 'Alert'}
+              </Pill>
+            )}
+            {field.condition && (
+              <Pill bg="#eef2ff" color="#4f46e5"><Split size={11} /> Conditional</Pill>
+            )}
           </div>
 
           {field.originalText && (
@@ -1149,6 +1249,7 @@ function FieldCard({ field, onChange, onEdit }: {
           <SmallBtn active={field.reviewStatus === 'accepted'} activeBg="#dcfce7" activeFg="#15803d"
             onClick={() => onChange({ reviewStatus: 'accepted' })}><Check size={13} /> Accept</SmallBtn>
           <SmallBtn active={false} onClick={onEdit}><Pencil size={13} /> Edit</SmallBtn>
+          {onDuplicate && <SmallBtn active={false} onClick={onDuplicate}><Copy size={13} /> Copy</SmallBtn>}
           <SmallBtn active={field.reviewStatus === 'rejected'} activeBg="#fee2e2" activeFg="#b91c1c"
             onClick={() => onChange({ reviewStatus: 'rejected' })}><X size={13} /> Reject</SmallBtn>
         </div>

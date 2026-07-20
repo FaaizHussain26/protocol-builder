@@ -1,16 +1,31 @@
 import { useEffect, useState } from 'react';
-import { X, Plus, Trash2, GripVertical, Save } from 'lucide-react';
-import type { StudyField, FieldType, Confidence } from '../types/study';
+import { X, Plus, Trash2, GripVertical, Save, AlertTriangle, Split } from 'lucide-react';
+import type { StudyField, FieldType, Confidence, FieldCondition } from '../types/study';
 
 interface FieldEditorDrawerProps {
   /** The field being edited, or null when closed. */
   field: StudyField | null;
   /** True when creating a brand-new field (changes title + hides delete). */
   isNew: boolean;
+  /** Other fields in the same form — used as targets for conditional logic. */
+  siblingFields?: StudyField[];
   onSave: (field: StudyField) => void;
   onDelete?: () => void;
   onClose: () => void;
 }
+
+const ALERT_LEVELS: { value: 'info' | 'warning' | 'critical'; label: string; color: string }[] = [
+  { value: 'info', label: 'Info', color: '#2563eb' },
+  { value: 'warning', label: 'Warning', color: '#b45309' },
+  { value: 'critical', label: 'Critical', color: '#b91c1c' },
+];
+
+const CONDITION_OPS: { value: FieldCondition['operator']; label: string; needsValue: boolean }[] = [
+  { value: 'equals', label: 'equals', needsValue: true },
+  { value: 'not-equals', label: 'does not equal', needsValue: true },
+  { value: 'is-not-empty', label: 'is answered', needsValue: false },
+  { value: 'is-empty', label: 'is blank', needsValue: false },
+];
 
 const FIELD_TYPES: { value: FieldType; label: string; desc: string }[] = [
   { value: 'text', label: 'Short text', desc: 'Single-line text' },
@@ -39,7 +54,7 @@ const CONFIDENCE_OPTS: { value: Confidence; label: string; color: string }[] = [
 
 const NEEDS_OPTIONS: FieldType[] = ['radio', 'checkbox', 'select', 'multiselect'];
 
-export default function FieldEditorDrawer({ field, isNew, onSave, onDelete, onClose }: FieldEditorDrawerProps) {
+export default function FieldEditorDrawer({ field, isNew, siblingFields = [], onSave, onDelete, onClose }: FieldEditorDrawerProps) {
   const [draft, setDraft] = useState<StudyField | null>(field);
 
   // Reset local draft whenever a different field is opened.
@@ -87,6 +102,9 @@ export default function FieldEditorDrawer({ field, isNew, onSave, onDelete, onCl
       options: NEEDS_OPTIONS.includes(draft.type)
         ? (draft.options ?? []).map(o => o.trim()).filter(Boolean)
         : undefined,
+      // Drop an empty alert / an unwired condition so they don't clutter the field.
+      alert: draft.alert && draft.alert.message.trim() ? { ...draft.alert, message: draft.alert.message.trim() } : undefined,
+      condition: draft.condition && draft.condition.whenFieldId ? draft.condition : undefined,
     };
     onSave(cleaned);
   };
@@ -95,6 +113,10 @@ export default function FieldEditorDrawer({ field, isNew, onSave, onDelete, onCl
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid #e2e8f0',
     background: '#fff', fontSize: 13.5, color: '#1e293b', outline: 'none', fontFamily: 'inherit',
+  };
+  const addBlockBtn: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 8,
+    border: '1.5px dashed #cbd5e1', background: '#fff', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
   };
 
   return (
@@ -261,6 +283,93 @@ export default function FieldEditorDrawer({ field, isNew, onSave, onDelete, onCl
             <textarea value={draft.completionGuidance ?? ''} onChange={e => set({ completionGuidance: e.target.value })}
               rows={3} placeholder="Plain instruction for site staff on how to complete this field..."
               style={{ ...inputStyle, resize: 'vertical', minHeight: 72, lineHeight: 1.5 }} />
+          </div>
+
+          {/* Alert */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>Alert <span style={{ color: '#94a3b8', fontWeight: 500 }}>(optional)</span></label>
+            {!draft.alert ? (
+              <button onClick={() => set({ alert: { level: 'warning', message: '' } })} style={addBlockBtn}>
+                <AlertTriangle size={14} /> Add alert
+              </button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: '11px 12px', border: '1.5px solid #e2e8f0', borderRadius: 9 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {ALERT_LEVELS.map(lv => {
+                    const active = draft.alert!.level === lv.value;
+                    return (
+                      <button key={lv.value} onClick={() => set({ alert: { ...draft.alert!, level: lv.value } })} style={{
+                        flex: 1, padding: '7px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                        border: `1.5px solid ${active ? lv.color : '#e2e8f0'}`, background: active ? lv.color + '15' : '#fff',
+                        color: active ? lv.color : '#64748b',
+                      }}>{lv.label}</button>
+                    );
+                  })}
+                  <button onClick={() => set({ alert: undefined })} title="Remove alert" style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 4 }}>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+                <textarea value={draft.alert.message} onChange={e => set({ alert: { ...draft.alert!, message: e.target.value } })}
+                  rows={2} placeholder="Alert message — e.g. “Notify the PI immediately if this value is clinically significant.”"
+                  style={{ ...inputStyle, resize: 'vertical', minHeight: 52, lineHeight: 1.5 }} />
+              </div>
+            )}
+          </div>
+
+          {/* Conditional logic */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>Conditional logic <span style={{ color: '#94a3b8', fontWeight: 500 }}>(optional)</span></label>
+            {!draft.condition ? (
+              <>
+                <button
+                  onClick={() => set({ condition: { whenFieldId: siblingFields[0]?.id, operator: 'equals', value: '', action: 'show' } })}
+                  disabled={siblingFields.length === 0}
+                  style={{ ...addBlockBtn, opacity: siblingFields.length === 0 ? 0.5 : 1, cursor: siblingFields.length === 0 ? 'not-allowed' : 'pointer' }}>
+                  <Split size={14} /> Add condition
+                </button>
+                {siblingFields.length === 0 && (
+                  <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Add another field to this form first to reference it.</p>
+                )}
+              </>
+            ) : (() => {
+              const cond = draft.condition;
+              const needsValue = CONDITION_OPS.find(o => o.value === cond.operator)?.needsValue ?? false;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: '11px 12px', border: '1.5px solid #e2e8f0', borderRadius: 9 }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>When</span>
+                    <select value={cond.whenFieldId ?? ''} onChange={e => set({ condition: { ...cond, whenFieldId: e.target.value } })}
+                      style={{ ...inputStyle, flex: 1, minWidth: 120, padding: '7px 9px' }}>
+                      {siblingFields.map(f => <option key={f.id} value={f.id}>{f.label || '(untitled field)'}</option>)}
+                    </select>
+                    <select value={cond.operator} onChange={e => set({ condition: { ...cond, operator: e.target.value as FieldCondition['operator'] } })}
+                      style={{ ...inputStyle, width: 'auto', padding: '7px 9px' }}>
+                      {CONDITION_OPS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    {needsValue && (
+                      <input value={cond.value ?? ''} onChange={e => set({ condition: { ...cond, value: e.target.value } })}
+                        placeholder="value" style={{ ...inputStyle, flex: 1, minWidth: 90, padding: '7px 9px' }} />
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>then</span>
+                    {([{ v: 'show', l: 'Show this field' }, { v: 'require', l: 'Make required' }] as const).map(a => {
+                      const active = cond.action === a.v;
+                      return (
+                        <button key={a.v} onClick={() => set({ condition: { ...cond, action: a.v } })} style={{
+                          flex: 1, padding: '7px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                          border: `1.5px solid ${active ? '#4f46e5' : '#e2e8f0'}`, background: active ? '#eef2ff' : '#fff',
+                          color: active ? '#4f46e5' : '#64748b',
+                        }}>{a.l}</button>
+                      );
+                    })}
+                    <button onClick={() => set({ condition: undefined })} title="Remove condition" style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 4 }}>
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Traceability */}

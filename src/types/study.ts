@@ -56,6 +56,28 @@ export interface StudyField {
   /** Snapshot of the AI-generated version taken on the FIRST user edit —
    *  the (original, edited) pair feeds the preference-learning memory. */
   aiOriginal?: FieldSnapshot;
+  /** Field-level alert shown to site staff / carried into the build. */
+  alert?: FieldAlert;
+  /** Conditional display/requirement driven by another field in the form. */
+  condition?: FieldCondition;
+}
+
+// An alert attached directly to a field (edited from the field drawer).
+export interface FieldAlert {
+  level: 'info' | 'warning' | 'critical';
+  message: string;
+}
+
+// Conditional logic on a field: when a controlling field meets the condition,
+// this field is shown (or becomes required).
+export interface FieldCondition {
+  /** Id of the controlling field in the same form. */
+  whenFieldId?: string;
+  operator: 'equals' | 'not-equals' | 'is-empty' | 'is-not-empty';
+  /** Comparison value (unused for is-empty / is-not-empty). */
+  value?: string;
+  /** What happens when the condition is met. */
+  action: 'show' | 'require';
 }
 
 /** The learnable aspects of a field, captured before the user's first edit. */
