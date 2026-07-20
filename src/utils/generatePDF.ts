@@ -119,28 +119,28 @@ function drawField(doc: jsPDF, f: import('../types/study').StudyField, x: number
     cy += bh;
   };
 
-  switch (f.type) {
+  // Treat a "dropdown" like a single-choice select so its options are printed.
+  const ftype = (f.type as string) === 'dropdown' ? 'select' : f.type;
+  switch (ftype) {
     case 'textarea': box(w, 14); break;
     case 'text': box(w, 6.5); break;
     case 'number': case 'integer': case 'decimal': box(42, 6.5, '0'); break;
     case 'date': box(46, 6.5, 'DD-MMM-YYYY'); break;
     case 'datetime': box(62, 6.5, 'DD-MMM-YYYY  HH:MM'); break;
     case 'time': box(28, 6.5, 'HH:MM'); break;
-    // Single-choice controls (dropdowns included) print as radio options; multi-choice print as checkboxes.
+    // Single-choice (dropdown/select/radio/yes-no) print as radio options — ONE
+    // PER LINE so every option is visible; multi-choice print as checkboxes.
     case 'select': case 'radio': case 'yesno': case 'multiselect': case 'checkbox': {
-      const opts = f.type === 'yesno' ? ['Yes', 'No'] : (f.options?.length ? f.options : ['Option 1', 'Option 2']);
-      const isRadio = f.type === 'select' || f.type === 'radio' || f.type === 'yesno';
+      const opts = ftype === 'yesno' ? ['Yes', 'No'] : (f.options?.length ? f.options : ['(no options specified)']);
+      const isMulti = ftype === 'multiselect' || ftype === 'checkbox';
       doc.setTextColor(71, 85, 105);
-      let ox = x;
       for (const opt of opts) {
-        const itemW = doc.getTextWidth(opt) + 9;
-        if (ox + itemW > x + w) { ox = x; cy += 6; }
-        if (isRadio) doc.circle(ox + 1.6, cy + 1.6, 1.6);
-        else doc.rect(ox, cy, 3.2, 3.2);
-        doc.text(opt, ox + 5, cy + 3);
-        ox += itemW;
+        const ol = doc.splitTextToSize(opt, w - 8);
+        if (isMulti) doc.rect(x, cy + 0.4, 3.2, 3.2);
+        else doc.circle(x + 1.6, cy + 2, 1.6);
+        doc.text(ol, x + 6, cy + 3);
+        cy += Math.max(5.6, ol.length * 4.4);
       }
-      cy += 6;
       doc.setTextColor(148, 163, 184);
       break;
     }
@@ -232,11 +232,13 @@ export function generateBuildSpecPDF(study: StudyModel, stats: DocStats): void {
       y += 5;
 
       for (const f of fields) {
-        const ctrlH = f.type === 'textarea' ? 16
-          : f.type === 'signature' ? 14
-          : f.type === 'file' ? 12
-          : f.type === 'select' || f.type === 'radio' || f.type === 'multiselect' || f.type === 'checkbox'
-            ? 6 + Math.ceil((f.options?.length ?? 2) / 3) * 6
+        const ft = (f.type as string) === 'dropdown' ? 'select' : f.type;
+        const isChoice = ft === 'select' || ft === 'radio' || ft === 'yesno' || ft === 'multiselect' || ft === 'checkbox';
+        const optCount = ft === 'yesno' ? 2 : (f.options?.length || 1);
+        const ctrlH = ft === 'textarea' ? 16
+          : ft === 'signature' ? 14
+          : ft === 'file' ? 12
+          : isChoice ? optCount * 5.8 + 2
           : 10;
         br(14 + ctrlH);
         y = drawField(doc, f, mL + 7, y, contentW - 12);

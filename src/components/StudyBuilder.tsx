@@ -269,6 +269,15 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   };
   const renameVisit = (visitId: string, name: string) =>
     setStudy({ ...study, visits: study.visits.map(v => v.id !== visitId ? v : { ...v, name }) });
+  // Reorder visits by swapping a visit with its neighbor (-1 = earlier, 1 = later).
+  const moveVisit = (visitId: string, dir: -1 | 1) => {
+    const visits = [...study.visits];
+    const i = visits.findIndex(v => v.id === visitId);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= visits.length) return;
+    [visits[i], visits[j]] = [visits[j], visits[i]];
+    setStudy({ ...study, visits });
+  };
 
   const addForm = (visitId: string, name?: string) => {
     const f = { ...blankForm(), name: name || 'New Form' };
@@ -615,8 +624,15 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                 })}
               </div>
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-                {activeVisit && (
+                {activeVisit && (() => {
+                  const vIdx = study.visits.findIndex(v => v.id === activeVisit.id);
+                  const first = vIdx <= 0, last = vIdx >= study.visits.length - 1;
+                  return (
                   <>
+                    <button className="lift" title="Move visit earlier" disabled={first} onClick={() => moveVisit(activeVisit.id, -1)}
+                      style={{ ...visitCtlBtn, ...(first ? { color: '#cbd5e1', cursor: 'default' } : {}) }}><ChevronUp size={14} /></button>
+                    <button className="lift" title="Move visit later" disabled={last} onClick={() => moveVisit(activeVisit.id, 1)}
+                      style={{ ...visitCtlBtn, ...(last ? { color: '#cbd5e1', cursor: 'default' } : {}) }}><ChevronDown size={14} /></button>
                     <button className="lift" title="Rename visit" onClick={() => {
                       const n = window.prompt('Rename visit', activeVisit.name);
                       if (n && n.trim()) renameVisit(activeVisit.id, n.trim());
@@ -625,7 +641,8 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       if (window.confirm(`Delete visit "${activeVisit.name}" and its forms?`)) removeVisit(activeVisit.id);
                     }} style={visitCtlBtn}><Trash2 size={13} /></button>
                   </>
-                )}
+                  );
+                })()}
                 <button className="lift" onClick={addVisit} style={{ ...visitCtlBtn, color: '#2563eb', borderColor: '#bfdbfe', width: 'auto', padding: '0 11px', gap: 6, fontWeight: 600, fontSize: 12.5 }}>
                   <Plus size={14} /> Visit
                 </button>
@@ -1143,7 +1160,9 @@ function FieldInput({ field, disabled }: { field: StudyField; disabled: boolean 
   const opts = field.options ?? [];
   const noOpts = <span style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>No options defined.</span>;
 
-  switch (field.type) {
+  // A "dropdown" behaves as a single-choice select.
+  const ftype = (field.type as string) === 'dropdown' ? 'select' : field.type;
+  switch (ftype) {
     case 'textarea':
       return <textarea rows={2} disabled={disabled} placeholder="Enter response"
         style={{ ...base, resize: 'vertical', minHeight: 56, lineHeight: 1.5 }} />;
