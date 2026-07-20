@@ -113,13 +113,33 @@ export interface RegenerateFormArgs {
   options?: BuildOptions;
 }
 
-export async function regenerateForm(
-  args: RegenerateFormArgs,
-): Promise<{ fields: StudyField[]; rules: ValidationRule[] }> {
-  return req<{ fields: StudyField[]; rules: ValidationRule[] }>('/api/build/regenerate', {
+type RegenResult = { fields: StudyField[]; rules: ValidationRule[] };
+type RegenStatus = { status: 'pending' | 'done' | 'error'; result?: RegenResult; error?: string };
+
+export async function regenerateForm(args: RegenerateFormArgs): Promise<RegenResult> {
+  // Same async-job pattern as the build: a regenerate makes a full enrichment
+  // call that can outlast the hosting proxy timeout, so poll instead.
+  const { jobId } = await req<{ jobId: string }>('/api/build/regenerate', {
     method: 'POST',
     body: JSON.stringify(args),
   });
+
+  const start = Date.now();
+  let fails = 0;
+  for (;;) {
+    await sleep(BUILD_POLL_MS);
+    let s: RegenStatus;
+    try {
+      s = await req<RegenStatus>(`/api/build/status/${jobId}`, {}, 0);
+      fails = 0;
+    } catch (e) {
+      if (++fails >= BUILD_MAX_POLL_FAILS) throw e;
+      continue;
+    }
+    if (s.status === 'done' && s.result) return s.result;
+    if (s.status === 'error') throw new Error(s.error || 'Regenerate failed on the server.');
+    if (Date.now() - start > BUILD_MAX_WAIT_MS) throw new Error('Regenerate timed out. Please try again.');
+  }
 }
 
 // ---- Persistence (single shared workspace) ----
