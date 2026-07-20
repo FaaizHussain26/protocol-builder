@@ -1322,6 +1322,7 @@ function FieldInput({ field, disabled }: { field: StudyField; disabled: boolean 
         <select disabled={disabled} defaultValue="" style={base}>
           <option value="" disabled>Select…</option>
           {opts.map(o => <option key={o} value={o}>{o}</option>)}
+          <option value="N/A">N/A</option>
         </select>
       );
     case 'multiselect':

@@ -165,7 +165,12 @@ function drawField(doc: jsPDF, f: import('../types/study').StudyField, x: number
     // Single-choice (dropdown/select/radio/yes-no) print as radio options — ONE
     // PER LINE so every option is visible; multi-choice print as checkboxes.
     case 'select': case 'radio': case 'yesno': case 'multiselect': case 'checkbox': {
-      const opts = ftype === 'yesno' ? ['Yes', 'No'] : (f.options?.length ? f.options : ['(no options specified)']);
+      // Dropdown/select fields always offer an N/A choice (matches the app preview).
+      const opts = ftype === 'yesno'
+        ? ['Yes', 'No']
+        : ftype === 'select'
+          ? [...(f.options ?? []), 'N/A']
+          : (f.options?.length ? f.options : ['(no options specified)']);
       const isMulti = ftype === 'multiselect' || ftype === 'checkbox';
       doc.setTextColor(71, 85, 105);
       for (const opt of opts) {
@@ -268,7 +273,8 @@ export function generateBuildSpecPDF(study: StudyModel, stats: DocStats): void {
       for (const f of fields) {
         const ft = (f.type as string) === 'dropdown' ? 'select' : f.type;
         const isChoice = ft === 'select' || ft === 'radio' || ft === 'yesno' || ft === 'multiselect' || ft === 'checkbox';
-        const optCount = ft === 'yesno' ? 2 : (f.options?.length || 1);
+        // select adds an N/A row (see drawField); yes/no is fixed at 2.
+        const optCount = ft === 'yesno' ? 2 : ft === 'select' ? (f.options?.length ?? 0) + 1 : (f.options?.length || 1);
         const ctrlH = ft === 'textarea' ? 16
           : ft === 'signature' ? 14
           : ft === 'file' ? 12
