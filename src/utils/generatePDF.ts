@@ -9,8 +9,42 @@ const DISCLAIMER =
   'Conceptual reference only. The production build will be more refined, customized, and aligned with final workflow and specifications. Not certified or submission-ready.';
 
 // ---------- shared helpers ----------
+// jsPDF's built-in fonts only support WinAnsi (Latin-1). Characters outside it
+// (↳ → ≥ ≤ “ ” … • and most symbols/emoji) render as mojibake such as "!³".
+// Map the common ones to ASCII and drop anything else still unsupported.
+function pdfSafe(s: string): string {
+  const mapped = (s ?? '')
+    .replace(/→/g, '->')
+    .replace(/[↳↪⇒➔➜]/g, '>')
+    .replace(/≥/g, '>=')
+    .replace(/≤/g, '<=')
+    .replace(/≠/g, '!=')
+    .replace(/×/g, 'x')
+    .replace(/[›»]/g, '>')
+    .replace(/[‹«]/g, '<')
+    .replace(/[‘’‚]/g, "'")
+    .replace(/[“”„]/g, '"')
+    .replace(/…/g, '...')
+    .replace(/[–—]/g, '-')
+    .replace(/•/g, '-');
+  // Drop anything still outside printable Latin-1 (keep tab/newline and high Latin-1).
+  let out = '';
+  for (const ch of mapped) {
+    const c = ch.codePointAt(0) ?? 0;
+    if (c === 9 || c === 10 || c === 13 || (c >= 0x20 && c <= 0x7e) || (c >= 0xa0 && c <= 0xff)) out += ch;
+  }
+  return out;
+}
+
 function setup(study: StudyModel, subtitle: string) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  // Sanitize every string that reaches the page, in one place, so both authored
+  // glyphs and AI-generated field text stay renderable.
+  const origText = doc.text.bind(doc) as (text: string | string[], ...rest: unknown[]) => jsPDF;
+  doc.text = ((text: string | string[], ...rest: unknown[]) =>
+    origText(Array.isArray(text) ? text.map(pdfSafe) : pdfSafe(text), ...rest)) as typeof doc.text;
+
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const mL = 18, mR = 18;

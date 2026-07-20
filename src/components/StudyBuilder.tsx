@@ -23,6 +23,18 @@ interface EditTarget {
   isNew: boolean;
 }
 
+// Chronological sort key for the visit dropdown: order by study day (D#), then
+// by week (W#) as a fallback; continuous logs (AE/ConMed) sort to the end.
+function visitSortKey(v: StudyVisit): number {
+  if (v.kind === 'log') return Number.MAX_SAFE_INTEGER;
+  const hay = `${v.name} ${v.timing ?? ''}`;
+  const day = hay.match(/\bD(?:ay)?\s*(-?\d+)/i);
+  if (day) return parseInt(day[1], 10);
+  const week = hay.match(/\bW(?:ee?k)?\s*(-?\d+)/i);
+  if (week) return parseInt(week[1], 10) * 7;
+  return Number.MAX_SAFE_INTEGER - 1; // no parseable timing → just before logs
+}
+
 let newFieldCounter = 0;
 function blankField(): StudyField {
   newFieldCounter += 1;
@@ -586,7 +598,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                   fontFamily: 'inherit', cursor: 'pointer', minWidth: 280, maxWidth: '100%',
                 }}
               >
-                {study.visits.map(v => (
+                {[...study.visits].sort((a, b) => visitSortKey(a) - visitSortKey(b)).map(v => (
                   <option key={v.id} value={v.id}>
                     {v.name}{v.timing ? ` — ${v.timing}` : ''}{v.kind === 'log' ? ' (log)' : ''}
                   </option>
