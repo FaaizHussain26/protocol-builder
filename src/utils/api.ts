@@ -162,8 +162,23 @@ export async function saveStudy(study: StudyModel, id?: string): Promise<StudyMo
   return saved;
 }
 
+// Soft delete — moves the study to Trash (recoverable).
 export async function deleteStudy(id: string): Promise<void> {
   await req<{ ok: boolean }>(`/api/studies/${id}`, { method: 'DELETE' });
+}
+
+// ---- Trash ----
+export async function listTrash(): Promise<StudySummary[]> {
+  const { items } = await req<{ items: StudySummary[] }>('/api/studies/trash');
+  return items;
+}
+
+export async function restoreStudy(id: string): Promise<void> {
+  await req<{ ok: boolean }>(`/api/studies/${id}/restore`, { method: 'POST' });
+}
+
+export async function permanentlyDeleteStudy(id: string): Promise<void> {
+  await req<{ ok: boolean }>(`/api/studies/${id}/permanent`, { method: 'DELETE' });
 }
 
 // ---- Templates ----

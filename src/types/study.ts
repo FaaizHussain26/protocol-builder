@@ -317,4 +317,6 @@ export interface StudySummary {
   fieldCount: number;
   /** Denormalized count of accepted fields — drives draft review progress. */
   approvedFieldCount?: number;
+  /** Set when the study is in Trash (soft-deleted). */
+  deletedAt?: string;
 }

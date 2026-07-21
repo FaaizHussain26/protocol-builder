@@ -31,6 +31,7 @@ const VIEW_TO_PATH: Record<AppView, string> = {
   library: '/e-sources',
   drafts: '/drafts',
   templates: '/templates',
+  trash: '/trash',
 };
 const PATH_TO_VIEW: Record<string, AppView> = {
   '/dashboard': 'dashboard',
@@ -38,6 +39,7 @@ const PATH_TO_VIEW: Record<string, AppView> = {
   '/e-sources': 'library',
   '/drafts': 'drafts',
   '/templates': 'templates',
+  '/trash': 'trash',
 };
 
 export default function App() {
@@ -189,6 +191,7 @@ export default function App() {
         )}
         {view === 'library' && <StudyLibrary mode="final" onOpen={handleOpenSaved} />}
         {view === 'drafts' && <StudyLibrary mode="drafts" onOpen={handleOpenSaved} />}
+        {view === 'trash' && <StudyLibrary mode="trash" onOpen={handleOpenSaved} />}
         {view === 'templates' && <TemplateManager onChanged={loadTemplates} />}
 
         {view === 'builder' && step === 'upload' && (

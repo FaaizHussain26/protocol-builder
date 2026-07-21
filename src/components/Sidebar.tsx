@@ -1,12 +1,12 @@
 import {
   Layers, Sparkles, FolderOpen, SlidersHorizontal, ListChecks,
-  AlertTriangle, FileOutput, Lock, LayoutDashboard, PenLine,
+  AlertTriangle, FileOutput, Lock, LayoutDashboard, PenLine, Trash2,
 } from 'lucide-react';
 import type { StudyModel } from '../types/study';
 
 export const SIDEBAR_WIDTH = 240;
 
-export type AppView = 'dashboard' | 'builder' | 'library' | 'drafts' | 'templates';
+export type AppView = 'dashboard' | 'builder' | 'library' | 'drafts' | 'templates' | 'trash';
 export type StudyTab = 'build' | 'eligibility' | 'intelligence' | 'export';
 
 interface SidebarProps {
@@ -65,6 +65,8 @@ export default function Sidebar({
         active={view === 'library'} onClick={() => onNavigate('library')} disabled={!apiConfigured} />
       <NavItem icon={<SlidersHorizontal size={15} />} label="Preferences Templates"
         active={view === 'templates'} onClick={() => onNavigate('templates')} disabled={!apiConfigured} />
+      <NavItem icon={<Trash2 size={15} />} label="Trash"
+        active={view === 'trash'} onClick={() => onNavigate('trash')} disabled={!apiConfigured} />
 
       {/* Current eSource sections */}
       {studyOpen && study && (
