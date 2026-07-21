@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Sparkles, AlertCircle, Loader, CheckCircle2,
   FileText, Layers, AlertTriangle, FileOutput,
@@ -22,9 +23,37 @@ type Step = 'upload' | 'processing' | 'build';
 const CONFIGURED = !!import.meta.env.VITE_API_BASE_URL;
 const DEMO_MODE = typeof window !== 'undefined' && window.location.hash === '#demo';
 
+// URL <-> view mapping. Each main view is a real route so refresh, back/forward,
+// and deep links land on the right page; unknown paths redirect to /dashboard.
+const VIEW_TO_PATH: Record<AppView, string> = {
+  dashboard: '/dashboard',
+  builder: '/build',
+  library: '/e-sources',
+  drafts: '/drafts',
+  templates: '/templates',
+};
+const PATH_TO_VIEW: Record<string, AppView> = {
+  '/dashboard': 'dashboard',
+  '/build': 'builder',
+  '/e-sources': 'library',
+  '/drafts': 'drafts',
+  '/templates': 'templates',
+};
+
 export default function App() {
   const [locked, setLocked] = useState(() => !isUnlocked());
-  const [view, setView] = useState<AppView>(DEMO_MODE ? 'builder' : 'dashboard');
+  const navigate = useNavigate();
+  const location = useLocation();
+  // View is derived from the URL; navigating sets the URL.
+  const view: AppView = PATH_TO_VIEW[location.pathname] ?? 'dashboard';
+  const setView = (v: AppView) => navigate(VIEW_TO_PATH[v]);
+
+  // Normalize entry: demo hash → /build; "/" or any unknown path → /dashboard.
+  useEffect(() => {
+    if (DEMO_MODE) { if (location.pathname !== '/build') navigate('/build', { replace: true }); return; }
+    if (!PATH_TO_VIEW[location.pathname]) navigate('/dashboard', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
   const [studyTab, setStudyTab] = useState<StudyTab>('build');
   const [step, setStep] = useState<Step>(DEMO_MODE ? 'build' : 'upload');
   const [protocolFiles, setProtocolFiles] = useState<File[]>([]);
