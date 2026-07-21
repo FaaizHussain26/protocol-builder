@@ -3,13 +3,15 @@ import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
   Check, X, Pencil, FlaskConical, ListChecks, Plus,
   PenLine, Upload, FileText, CircleDot, Save, Trash2, RefreshCw, Copy, CopyPlus,
-  ChevronUp, ChevronDown, GripVertical, ArrowDownUp, Split,
+  ChevronUp, ChevronDown, GripVertical, ArrowDownUp, Split, SlidersHorizontal,
 } from 'lucide-react';
 import type {
   StudyModel, StudyField, StudyForm, StudyVisit, ReviewStatus,
 } from '../types/study';
 import { regenerateForm, saveStudy } from '../utils/api';
 import { ALL_STANDARD_NAMES, canonicalRank } from '../utils/standardForms';
+import { arrayMove } from '@dnd-kit/sortable';
+import { SortableList, SortableRow } from './dnd';
 import { ConfidenceBadge, TypeBadge, Pill } from './ui';
 import EligibilityPanel from './EligibilityPanel';
 import FindingsPanel from './FindingsPanel';
@@ -114,7 +116,7 @@ interface StudyBuilderProps {
   onTabChange?: (t: Tab) => void;
 }
 
-export type Tab = 'build' | 'eligibility' | 'intelligence' | 'export';
+export type Tab = 'build' | 'eligibility' | 'intelligence' | 'export' | 'settings';
 
 export default function StudyBuilder({ study, setStudy, onReset, studyId, protocolText, onStudyIdChange, autoSaveEnabled, tab: controlledTab, onTabChange }: StudyBuilderProps) {
   const [internalTab, setInternalTab] = useState<Tab>('build');
@@ -148,8 +150,6 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   const firstAutoRun = useRef(true);
   const savedIdRef = useRef<string | undefined>(studyId);
   useEffect(() => { savedIdRef.current = studyId; }, [studyId]);
-  // Id of the form currently being dragged in the forms side-menu.
-  const dragFormId = useRef<string | null>(null);
 
   // ---- Derived counts ----
   const stats = useMemo(() => {
@@ -322,72 +322,16 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   const updateForm = (formId: string, patch: Partial<StudyForm>) =>
     setStudy({ ...study, visits: study.visits.map(v => ({ ...v, forms: v.forms.map(f => f.id !== formId ? f : { ...f, ...patch }) })) });
 
-  // ---- Manual form ordering (up/down + drag-and-drop) ----
-  // Swap a form with its neighbor within the visit.
-  const moveForm = (visitId: string, formId: string, dir: -1 | 1) =>
-    setStudy({
-      ...study,
-      visits: study.visits.map(v => {
-        if (v.id !== visitId) return v;
-        const forms = [...v.forms];
-        const i = forms.findIndex(f => f.id === formId);
-        const j = i + dir;
-        if (i < 0 || j < 0 || j >= forms.length) return v;
-        [forms[i], forms[j]] = [forms[j], forms[i]];
-        return { ...v, forms };
-      }),
-    });
-  // Move a dragged form to the drop target's position within the visit.
-  const reorderForms = (visitId: string, fromId: string, toId: string) => {
-    if (fromId === toId) return;
-    setStudy({
-      ...study,
-      visits: study.visits.map(v => {
-        if (v.id !== visitId) return v;
-        const forms = [...v.forms];
-        const from = forms.findIndex(f => f.id === fromId);
-        const to = forms.findIndex(f => f.id === toId);
-        if (from < 0 || to < 0) return v;
-        const [moved] = forms.splice(from, 1);
-        forms.splice(to, 0, moved);
-        return { ...v, forms };
-      }),
-    });
-  };
+  // ---- Manual form ordering (drag-and-drop via @dnd-kit) ----
+  const reorderFormsByIndex = (visitId: string, from: number, to: number) =>
+    setStudy({ ...study, visits: study.visits.map(v => v.id !== visitId ? v : { ...v, forms: arrayMove(v.forms, from, to) }) });
 
-  // ---- Manual field & section ordering within a form ----
-  // Move a question up/down through the whole form. Within a section it just
-  // reorders; when it crosses a section boundary it MOVES INTO the adjacent
-  // section (adopting that section's name).
-  const moveField = (formId: string, fieldId: string, dir: -1 | 1) =>
-    mapFormFields(formId, fields => {
-      const groups = groupFieldsBySection(fields);
-      const ordered = groups.flatMap(g => g.fields.map(f => f.id));
-      const secById = new Map<string, string | null>();
-      groups.forEach(g => g.fields.forEach(f => secById.set(f.id, g.section)));
-      const p = ordered.indexOf(fieldId);
-      const q = p + dir;
-      if (p < 0 || q < 0 || q >= ordered.length) return fields;
-      const targetSection = secById.get(ordered[q]) ?? null; // section being entered
-      const ids = [...ordered];
-      ids.splice(p, 1);
-      ids.splice(q, 0, fieldId);
-      const byId = new Map(fields.map(f => [f.id, f]));
-      return ids.map(id => {
-        const f = byId.get(id)!;
-        return id === fieldId ? { ...f, section: targetSection ?? undefined } : f;
-      });
-    });
-  // Move an entire section (its block of fields) above/below the adjacent section.
-  const moveSection = (formId: string, section: string | null, dir: -1 | 1) =>
-    mapFormFields(formId, fields => {
-      const groups = groupFieldsBySection(fields);
-      const i = groups.findIndex(g => g.section === section);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= groups.length) return fields;
-      [groups[i], groups[j]] = [groups[j], groups[i]];
-      return groups.flatMap(g => g.fields);
-    });
+  // ---- Field & section ordering (drag-and-drop via @dnd-kit) ----
+  // Replace a form's fields with a reordered array. FormBlock builds this from a
+  // single flat drag list of section-headers + fields, updating each field's
+  // section so dragging across a header moves the input into that section.
+  const reorderFormFields = (formId: string, next: StudyField[]) =>
+    mapFormFields(formId, () => next);
 
   // Duplicate an entire section's questions within the same form. Build a
   // repeated section (e.g. three sets of vitals) once, then copy it — the block
@@ -553,6 +497,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     { id: 'build', label: 'Study Build', icon: <Layers size={15} /> },
     { id: 'eligibility', label: 'Eligibility', icon: <ListChecks size={15} />, badge: study.eligibility.length },
     { id: 'intelligence', label: 'Intelligence', icon: <AlertTriangle size={15} />, badge: study.findings.filter(f => !f.resolved).length },
+    { id: 'settings', label: 'eSource Settings', icon: <SlidersHorizontal size={15} /> },
     { id: 'export', label: 'Export', icon: <FileOutput size={15} /> },
   ];
 
@@ -787,58 +732,57 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                 <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase', padding: '0 8px', marginBottom: 10 }}>
                   Forms
                 </p>
-                {(activeVisit?.forms ?? [])
-                  .filter(f => reviewFilter === 'all' || f.fields.some(x => x.reviewStatus === reviewFilter))
-                  .map((f, idx, arr) => {
-                  const active = f.id === activeForm?.id;
-                  const status = formReviewStatus(f);
-                  const approvedCount = f.fields.filter(x => x.reviewStatus === 'accepted').length;
-                  // Reorder only in the unfiltered list, where index === true order.
+                {(() => {
+                  const visForms = (activeVisit?.forms ?? []).filter(f => reviewFilter === 'all' || f.fields.some(x => x.reviewStatus === reviewFilter));
                   const canReorder = reviewFilter === 'all' && !!activeVisit;
+                  const row = (f: StudyForm, handle?: React.ReactNode) => {
+                    const active = f.id === activeForm?.id;
+                    const status = formReviewStatus(f);
+                    const approvedCount = f.fields.filter(x => x.reviewStatus === 'accepted').length;
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'stretch', gap: 2, marginBottom: 4, borderRadius: 9, background: active ? '#eff6ff' : 'transparent' }}>
+                        {handle}
+                        <button className="form-tab" onClick={() => setActiveFormId(f.id)} style={{
+                          flex: 1, minWidth: 0, textAlign: 'left', padding: '10px 10px',
+                          borderRadius: 9, border: 'none', cursor: 'pointer', background: 'transparent',
+                          display: 'flex', alignItems: 'center', gap: 9,
+                        }}>
+                          <span style={{ color: active ? '#2563eb' : '#94a3b8', flexShrink: 0 }}>
+                            {f.appliedTemplate ? <CircleDot size={15} /> : <FileText size={15} />}
+                          </span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: active ? '#2563eb' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {f.name}
+                            </span>
+                            <span style={{ display: 'block', fontSize: 11, color: status === 'accepted' ? '#15803d' : status === 'rejected' ? '#b91c1c' : '#b45309' }}>
+                              {approvedCount}/{f.fields.length} approved
+                            </span>
+                          </span>
+                          <span title={status === 'accepted' ? 'All fields approved' : status === 'rejected' ? 'Has rejected fields' : 'Pending review'}
+                            style={{ width: 9, height: 9, borderRadius: '50%', background: RAG[status], flexShrink: 0 }} />
+                        </button>
+                      </div>
+                    );
+                  };
+                  if (!canReorder) return visForms.map(f => <div key={f.id}>{row(f)}</div>);
                   return (
-                    <div
-                      key={f.id}
-                      draggable={canReorder}
-                      onDragStart={() => { dragFormId.current = f.id; }}
-                      onDragOver={e => { if (canReorder) e.preventDefault(); }}
-                      onDrop={e => { e.preventDefault(); if (canReorder && dragFormId.current && activeVisit) reorderForms(activeVisit.id, dragFormId.current, f.id); dragFormId.current = null; }}
-                      onDragEnd={() => { dragFormId.current = null; }}
-                      style={{ display: 'flex', alignItems: 'stretch', gap: 2, marginBottom: 4, borderRadius: 9, background: active ? '#eff6ff' : 'transparent' }}
-                    >
-                      {canReorder && (
-                        <span title="Drag to reorder" style={{ display: 'flex', alignItems: 'center', color: '#cbd5e1', cursor: 'grab', paddingLeft: 3 }}>
-                          <GripVertical size={13} />
-                        </span>
-                      )}
-                      <button className="form-tab" onClick={() => setActiveFormId(f.id)} style={{
-                        flex: 1, minWidth: 0, textAlign: 'left', padding: '10px 10px',
-                        borderRadius: 9, border: 'none', cursor: 'pointer', background: 'transparent',
-                        display: 'flex', alignItems: 'center', gap: 9,
-                      }}>
-                        <span style={{ color: active ? '#2563eb' : '#94a3b8', flexShrink: 0 }}>
-                          {f.appliedTemplate ? <CircleDot size={15} /> : <FileText size={15} />}
-                        </span>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: active ? '#2563eb' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {f.name}
-                          </span>
-                          <span style={{ display: 'block', fontSize: 11, color: status === 'accepted' ? '#15803d' : status === 'rejected' ? '#b91c1c' : '#b45309' }}>
-                            {approvedCount}/{f.fields.length} approved
-                          </span>
-                        </span>
-                        {/* RAG status dot: green all approved, amber pending, red rejected */}
-                        <span title={status === 'accepted' ? 'All fields approved' : status === 'rejected' ? 'Has rejected fields' : 'Pending review'}
-                          style={{ width: 9, height: 9, borderRadius: '50%', background: RAG[status], flexShrink: 0 }} />
-                      </button>
-                      {canReorder && (
-                        <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1, paddingRight: 2 }}>
-                          <button className="lift" title="Move up" disabled={idx === 0} onClick={() => activeVisit && moveForm(activeVisit.id, f.id, -1)} style={reorderBtn(idx === 0)}><ChevronUp size={12} /></button>
-                          <button className="lift" title="Move down" disabled={idx === arr.length - 1} onClick={() => activeVisit && moveForm(activeVisit.id, f.id, 1)} style={reorderBtn(idx === arr.length - 1)}><ChevronDown size={12} /></button>
-                        </span>
-                      )}
-                    </div>
+                    <SortableList ids={visForms.map(f => f.id)} onReorder={(from, to) => activeVisit && reorderFormsByIndex(activeVisit.id, from, to)}>
+                      {visForms.map(f => (
+                        <SortableRow key={f.id} id={f.id}>
+                          {({ setNodeRef, style, handleProps }) => (
+                            <div ref={setNodeRef} style={style}>
+                              {row(f, (
+                                <span {...handleProps} title="Drag to reorder" style={{ display: 'flex', alignItems: 'center', color: '#cbd5e1', cursor: 'grab', paddingLeft: 3, touchAction: 'none' }}>
+                                  <GripVertical size={13} />
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </SortableRow>
+                      ))}
+                    </SortableList>
                   );
-                })}
+                })()}
                 {reviewFilter !== 'all' && (activeVisit?.forms ?? []).every(f => !f.fields.some(x => x.reviewStatus === reviewFilter)) && (
                   <p style={{ fontSize: 12, color: '#94a3b8', padding: '4px 8px', fontStyle: 'italic' }}>
                     No forms with {reviewFilter === 'accepted' ? 'approved' : reviewFilter} fields in this visit.
@@ -915,8 +859,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       regenerating={regenId === activeForm.id}
                       onDeleteForm={() => activeVisit && removeForm(activeVisit.id, activeForm.id)}
                       onDuplicateForm={() => activeVisit && duplicateForm(activeVisit.id, activeForm.id)}
-                      onMoveField={moveField}
-                      onMoveSection={moveSection}
+                      onReorderFields={reorderFormFields}
                       onDuplicateSection={duplicateSection}
                       onApplyToAllForms={applySectionToAllForms}
                       onDuplicateField={duplicateField}
@@ -931,6 +874,14 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
           </div>
         )}
 
+        {tab === 'settings' && (
+          <SettingsPanel
+            visits={study.visits}
+            activeVisitId={activeVisitId}
+            activeFormId={activeFormId}
+            onReorderOptions={(formId, fieldId, options) => mutateField(formId, fieldId, { options })}
+          />
+        )}
         {tab === 'eligibility' && <EligibilityPanel eligibility={study.eligibility} />}
         {tab === 'intelligence' && (
           <FindingsPanel
@@ -1003,7 +954,7 @@ function groupFieldsBySection(fields: StudyField[]): { key: string; section: str
   }));
 }
 
-function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onMoveField, onMoveSection, onDuplicateSection, onApplyToAllForms, onDuplicateField, onDeleteField }: {
+function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onReorderFields, onDuplicateSection, onApplyToAllForms, onDuplicateField, onDeleteField }: {
   form: StudyForm;
   filter: 'all' | ReviewStatus;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
@@ -1016,8 +967,7 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
   regenerating: boolean;
   onDeleteForm: () => void;
   onDuplicateForm: () => void;
-  onMoveField: (formId: string, fieldId: string, dir: -1 | 1) => void;
-  onMoveSection: (formId: string, section: string | null, dir: -1 | 1) => void;
+  onReorderFields: (formId: string, next: StudyField[]) => void;
   onDuplicateSection: (formId: string, section: string | null) => void;
   onApplyToAllForms: (formId: string, section: string | null) => void;
   onDuplicateField: (formId: string, fieldId: string) => void;
@@ -1095,54 +1045,94 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
           </p>
         )}
         {(() => {
-          // Reorder only in the unfiltered view, where index === true order.
+          // Reorder only in the unfiltered view, where order === true order.
           const canReorder = filter === 'all';
           const groups = groupFieldsBySection(visibleFields);
-          // Global render order — field up/down crosses section boundaries, so
-          // first/last are relative to the whole form, not the section.
-          const orderedIds = groups.flatMap(g => g.fields.map(f => f.id));
-          return groups.map((group, gi) => (
-          <div key={group.key} className="anim-row" style={{ animationDelay: `${Math.min(gi * 55, 280)}ms` }}>
-            {group.section && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '9px 18px', background: '#f1f5f9',
-                borderBottom: '1px solid #e2e8f0', borderTop: '1px solid #eef2f7',
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#7c3aed', flexShrink: 0 }} />
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', letterSpacing: 0.4, textTransform: 'uppercase' }}>
-                  {group.section}
+
+          const sectionHeader = (section: string, count: number, handle?: React.ReactNode) => (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 18px', background: '#f1f5f9',
+              borderBottom: '1px solid #e2e8f0', borderTop: '1px solid #eef2f7',
+            }}>
+              {handle}
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#7c3aed', flexShrink: 0 }} />
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', letterSpacing: 0.4, textTransform: 'uppercase' }}>{section}</span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>{count} question{count !== 1 ? 's' : ''}</span>
+              {canReorder && (
+                <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <button className="lift" title={`Duplicate the “${section}” section in this form`} onClick={() => onDuplicateSection(form.id, section)} style={reorderBtn(false)}><Copy size={12} /></button>
+                  <button className="lift" title={`Copy the “${section}” section to every form`} onClick={() => {
+                    if (window.confirm(`Add the “${section}” section to every form in the study that doesn’t already have it?`)) onApplyToAllForms(form.id, section);
+                  }} style={reorderBtn(false)}><CopyPlus size={12} /></button>
                 </span>
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>
-                  {group.fields.length} question{group.fields.length !== 1 ? 's' : ''}
-                </span>
-                {canReorder && (
-                  <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    <button className="lift" title={`Duplicate the “${group.section}” section in this form`} onClick={() => onDuplicateSection(form.id, group.section)} style={reorderBtn(false)}><Copy size={12} /></button>
-                    <button className="lift" title={`Copy the “${group.section}” section to every form`} onClick={() => {
-                      if (window.confirm(`Add the “${group.section}” section to every form in the study that doesn’t already have it?`)) onApplyToAllForms(form.id, group.section);
-                    }} style={reorderBtn(false)}><CopyPlus size={12} /></button>
-                    <span style={{ width: 1, height: 14, background: '#e2e8f0', margin: '0 2px' }} />
-                    <button className="lift" title="Move section up" disabled={gi === 0} onClick={() => onMoveSection(form.id, group.section, -1)} style={reorderBtn(gi === 0)}><ChevronUp size={13} /></button>
-                    <button className="lift" title="Move section down" disabled={gi === groups.length - 1} onClick={() => onMoveSection(form.id, group.section, 1)} style={reorderBtn(gi === groups.length - 1)}><ChevronDown size={13} /></button>
-                  </span>
-                )}
+              )}
+            </div>
+          );
+
+          const fieldCard = (field: StudyField, handle?: React.ReactNode) => (
+            <FieldCard field={field}
+              onChange={patch => onField(form.id, field.id, patch)}
+              onEdit={() => onEditField(form.id, field)}
+              onDuplicate={() => onDuplicateField(form.id, field.id)}
+              onDelete={() => onDeleteField(form.id, field.id)}
+              dragHandle={handle} />
+          );
+
+          if (!canReorder) {
+            return groups.map((group, gi) => (
+              <div key={group.key} className="anim-row" style={{ animationDelay: `${Math.min(gi * 55, 280)}ms` }}>
+                {group.section && sectionHeader(group.section, group.fields.length)}
+                {group.fields.map(field => <div key={field.id}>{fieldCard(field)}</div>)}
               </div>
-            )}
-            {group.fields.map(field => (
-              <FieldCard key={field.id} field={field}
-                onChange={patch => onField(form.id, field.id, patch)}
-                onEdit={() => onEditField(form.id, field)}
-                onDuplicate={() => onDuplicateField(form.id, field.id)}
-                onDelete={() => onDeleteField(form.id, field.id)}
-                canReorder={canReorder}
-                isFirst={orderedIds.indexOf(field.id) === 0}
-                isLast={orderedIds.indexOf(field.id) === orderedIds.length - 1}
-                onMoveUp={() => onMoveField(form.id, field.id, -1)}
-                onMoveDown={() => onMoveField(form.id, field.id, 1)} />
-            ))}
-          </div>
-          ));
+            ));
+          }
+
+          // One flat drag list of section headers + fields. Dragging a field
+          // across a header moves it INTO that section; dragging a header moves
+          // the whole section. Empty sections (a header with no following fields)
+          // simply disappear, matching how sections are derived from fields.
+          type Item = { id: string; kind: 'header'; section: string } | { id: string; kind: 'field'; field: StudyField };
+          const items: Item[] = [];
+          for (const g of groups) {
+            if (g.section) items.push({ id: `sec::${g.section}`, kind: 'header', section: g.section });
+            for (const f of g.fields) items.push({ id: f.id, kind: 'field', field: f });
+          }
+          const counts = new Map(groups.map(g => [g.section, g.fields.length]));
+
+          const onReorder = (from: number, to: number) => {
+            const next = arrayMove(items, from, to);
+            let curSection: string | undefined = undefined;
+            const out: StudyField[] = [];
+            for (const it of next) {
+              if (it.kind === 'header') curSection = it.section;
+              else out.push({ ...it.field, section: curSection });
+            }
+            onReorderFields(form.id, out);
+          };
+
+          return (
+            <SortableList ids={items.map(i => i.id)} onReorder={onReorder}>
+              {items.map(it => (
+                <SortableRow key={it.id} id={it.id}>
+                  {({ setNodeRef, style, handleProps }) => {
+                    const grip = (
+                      <span {...handleProps} title="Drag to reorder" style={{ display: 'inline-flex', alignItems: 'center', color: '#cbd5e1', cursor: 'grab', touchAction: 'none' }}>
+                        <GripVertical size={it.kind === 'header' ? 14 : 13} />
+                      </span>
+                    );
+                    return (
+                      <div ref={setNodeRef} style={style}>
+                        {it.kind === 'header'
+                          ? sectionHeader(it.section, counts.get(it.section) ?? 0, grip)
+                          : fieldCard(it.field, grip)}
+                      </div>
+                    );
+                  }}
+                </SortableRow>
+              ))}
+            </SortableList>
+          );
         })()}
       </div>
 
@@ -1249,17 +1239,13 @@ function FormAlerts({ form, onUpdateForm }: { form: StudyForm; onUpdateForm: (fo
   );
 }
 
-function FieldCard({ field, onChange, onEdit, onDuplicate, onDelete, canReorder, isFirst, isLast, onMoveUp, onMoveDown }: {
+function FieldCard({ field, onChange, onEdit, onDuplicate, onDelete, dragHandle }: {
   field: StudyField;
   onChange: (patch: Partial<StudyField>) => void;
   onEdit: () => void;
   onDuplicate?: () => void;
   onDelete?: () => void;
-  canReorder?: boolean;
-  isFirst?: boolean;
-  isLast?: boolean;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
+  dragHandle?: React.ReactNode;
 }) {
   const flagged = field.confidence === 'low' && field.reviewStatus === 'pending';
 
@@ -1279,11 +1265,8 @@ function FieldCard({ field, onChange, onEdit, onDuplicate, onDelete, canReorder,
       opacity: field.reviewStatus === 'rejected' ? 0.6 : 1,
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        {canReorder && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, paddingTop: 1 }}>
-            <button className="lift" title="Move question up" disabled={isFirst} onClick={onMoveUp} style={reorderBtn(!!isFirst)}><ChevronUp size={12} /></button>
-            <button className="lift" title="Move question down" disabled={isLast} onClick={onMoveDown} style={reorderBtn(!!isLast)}><ChevronDown size={12} /></button>
-          </div>
+        {dragHandle && (
+          <div style={{ flexShrink: 0, paddingTop: 2 }}>{dragHandle}</div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: '#1e293b', lineHeight: 1.4 }}>
@@ -1448,6 +1431,74 @@ function FieldInput({ field, disabled }: { field: StudyField; disabled: boolean 
     default:
       return <input type="text" disabled={disabled} placeholder="Enter response" style={base} />;
   }
+}
+
+// eSource Settings tab — drag-reorder the answer options of dropdown/select
+// fields in the active form.
+function SettingsPanel({ visits, activeVisitId, activeFormId, onReorderOptions }: {
+  visits: StudyVisit[];
+  activeVisitId: string;
+  activeFormId: string;
+  onReorderOptions: (formId: string, fieldId: string, options: string[]) => void;
+}) {
+  const visit = visits.find(v => v.id === activeVisitId) ?? visits[0];
+  const form = visit?.forms.find(f => f.id === activeFormId) ?? visit?.forms[0];
+  const isDropdown = (f: StudyField) => (f.type === 'select' || (f.type as string) === 'dropdown') && (f.options?.length ?? 0) > 0;
+  const selects = (form?.fields ?? []).filter(isDropdown);
+
+  const cardStyle: React.CSSProperties = {
+    background: '#fff', borderRadius: 14, border: '1px solid #e8edf4', padding: '14px 18px', marginBottom: 12,
+  };
+
+  return (
+    <div className="anim-form" style={{ maxWidth: 820, margin: '0 auto' }}>
+      <div style={{ ...cardStyle, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <SlidersHorizontal size={18} color="#2563eb" style={{ flexShrink: 0, marginTop: 1 }} />
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>eSource Settings</h2>
+          <p style={{ fontSize: 12.5, color: '#64748b', marginTop: 3, lineHeight: 1.5 }}>
+            Drag to reorder the answer options of each dropdown field. Showing dropdowns for{' '}
+            <b style={{ color: '#334155' }}>{form?.name ?? '—'}</b>{visit ? ` · ${visit.name}` : ''} — change the form in <b style={{ color: '#334155' }}>Study Build</b>.
+          </p>
+        </div>
+      </div>
+
+      {!form ? (
+        <p style={{ color: '#94a3b8', fontSize: 14, textAlign: 'center', padding: '24px 0' }}>No form selected.</p>
+      ) : selects.length === 0 ? (
+        <p style={{ color: '#94a3b8', fontSize: 14, textAlign: 'center', padding: '24px 0' }}>
+          “{form.name}” has no dropdown fields to configure.
+        </p>
+      ) : (
+        selects.map(field => (
+          <div key={field.id} style={cardStyle}>
+            <p style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>{field.label}</p>
+            <p style={{ fontSize: 11.5, color: '#94a3b8', marginBottom: 10 }}>{field.options!.length} options · drag to reorder</p>
+            <SortableList
+              ids={field.options!.map((_, i) => `${field.id}-opt-${i}`)}
+              onReorder={(from, to) => onReorderOptions(form.id, field.id, arrayMove(field.options!, from, to))}
+            >
+              {field.options!.map((opt, i) => (
+                <SortableRow key={`${field.id}-opt-${i}`} id={`${field.id}-opt-${i}`}>
+                  {({ setNodeRef, style, handleProps }) => (
+                    <div ref={setNodeRef} style={{
+                      ...style, display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
+                      border: '1px solid #e8edf4', borderRadius: 9, background: '#fafbfc', marginBottom: 6,
+                    }}>
+                      <span {...handleProps} title="Drag to reorder" style={{ display: 'inline-flex', color: '#cbd5e1', cursor: 'grab', touchAction: 'none' }}>
+                        <GripVertical size={15} />
+                      </span>
+                      <span style={{ fontSize: 13.5, color: '#1e293b' }}>{opt}</span>
+                    </div>
+                  )}
+                </SortableRow>
+              ))}
+            </SortableList>
+          </div>
+        ))
+      )}
+    </div>
+  );
 }
 
 function SmallBtn({ children, onClick, active, activeBg, activeFg }: {

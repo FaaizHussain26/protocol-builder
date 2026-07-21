@@ -7,7 +7,7 @@ import type { StudyModel } from '../types/study';
 export const SIDEBAR_WIDTH = 240;
 
 export type AppView = 'dashboard' | 'builder' | 'library' | 'drafts' | 'templates' | 'trash';
-export type StudyTab = 'build' | 'eligibility' | 'intelligence' | 'export';
+export type StudyTab = 'build' | 'eligibility' | 'intelligence' | 'export' | 'settings';
 
 interface SidebarProps {
   view: AppView;
@@ -85,6 +85,8 @@ export default function Sidebar({
             active={view === 'builder' && studyTab === 'eligibility'} onClick={() => onStudyTab('eligibility')} />
           <NavItem icon={<AlertTriangle size={15} />} label="Intelligence" badge={unresolved || undefined}
             active={view === 'builder' && studyTab === 'intelligence'} onClick={() => onStudyTab('intelligence')} />
+          <NavItem icon={<SlidersHorizontal size={15} />} label="eSource Settings"
+            active={view === 'builder' && studyTab === 'settings'} onClick={() => onStudyTab('settings')} />
           <NavItem icon={<FileOutput size={15} />} label="Export"
             active={view === 'builder' && studyTab === 'export'} onClick={() => onStudyTab('export')} />
         </>
