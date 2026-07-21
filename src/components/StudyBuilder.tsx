@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
   Check, X, Pencil, FlaskConical, ListChecks, Plus,
-  PenLine, Upload, FileText, CircleDot, Save, Trash2, RefreshCw, Copy,
+  PenLine, Upload, FileText, CircleDot, Save, Trash2, RefreshCw, Copy, CopyPlus,
   ChevronUp, ChevronDown, GripVertical, ArrowDownUp, Split,
 } from 'lucide-react';
 import type {
@@ -388,6 +388,62 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
       [groups[i], groups[j]] = [groups[j], groups[i]];
       return groups.flatMap(g => g.fields);
     });
+
+  // Duplicate an entire section's questions within the same form. Build a
+  // repeated section (e.g. three sets of vitals) once, then copy it — the block
+  // is inserted right after the source and gets the next free numbered name
+  // ("Vital Signs" → "Vital Signs 2"). Fresh field ids keep the copy independent.
+  const duplicateSection = (formId: string, section: string | null) =>
+    mapFormFields(formId, fields => {
+      const groups = groupFieldsBySection(fields);
+      const gi = groups.findIndex(g => g.section === section);
+      if (gi < 0 || !groups[gi].section) return fields;
+      const base = groups[gi].section!.replace(/\s+\d+$/, '').trim() || 'Section';
+      const taken = new Set(groups.map(g => g.section));
+      let n = 2, name = `${base} ${n}`;
+      while (taken.has(name)) { n += 1; name = `${base} ${n}`; }
+      newFieldCounter += 1;
+      const stamp = `${Date.now()}-${newFieldCounter}`;
+      const copies = groups[gi].fields.map((f, i) => {
+        const { editedByUser, aiOriginal, ...rest } = f;
+        void editedByUser; void aiOriginal;
+        return { ...rest, id: `fld-sec-${stamp}-${i}`, section: name, reviewStatus: 'pending' as ReviewStatus };
+      });
+      return groups.flatMap((g, idx) => idx === gi ? [...g.fields, ...copies] : g.fields);
+    });
+
+  // Copy a section (e.g. a required Signature block) into EVERY form in the
+  // study. Build it once, then stamp it onto every page. Idempotent: the source
+  // form and any form that already has a section of that name are skipped.
+  const applySectionToAllForms = (sourceFormId: string, section: string | null) => {
+    if (!section) return;
+    let source: StudyField[] | null = null;
+    for (const v of study.visits) {
+      const f = v.forms.find(x => x.id === sourceFormId);
+      if (f) { source = f.fields.filter(x => (x.section?.trim() || null) === section); break; }
+    }
+    if (!source || source.length === 0) return;
+    const stampBase = Date.now();
+    let added = 0;
+    const visits = study.visits.map(v => ({
+      ...v,
+      forms: v.forms.map(f => {
+        if (f.id === sourceFormId) return f;
+        if (f.fields.some(x => (x.section?.trim() || null) === section)) return f;
+        added += 1;
+        const copies = source!.map((fld, i) => {
+          const { editedByUser, aiOriginal, ...rest } = fld;
+          void editedByUser; void aiOriginal;
+          return { ...rest, id: `fld-all-${stampBase}-${added}-${i}`, section, reviewStatus: 'pending' as ReviewStatus };
+        });
+        return { ...f, fields: [...f.fields, ...copies] };
+      }),
+    }));
+    setStudy({ ...study, visits });
+    setSaveMsg(added > 0
+      ? `“${section}” added to ${added} form${added !== 1 ? 's' : ''}`
+      : `“${section}” is already on every form`);
+  };
 
   // Duplicate a form within the same visit (inserted right after the source).
   const duplicateForm = (visitId: string, formId: string) => {
@@ -859,6 +915,8 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       onDuplicateForm={() => activeVisit && duplicateForm(activeVisit.id, activeForm.id)}
                       onMoveField={moveField}
                       onMoveSection={moveSection}
+                      onDuplicateSection={duplicateSection}
+                      onApplyToAllForms={applySectionToAllForms}
                       onDuplicateField={duplicateField}
                       onDeleteField={(formId, fieldId) => { if (window.confirm('Delete this field?')) deleteField(formId, fieldId); }}
                     />
@@ -943,7 +1001,7 @@ function groupFieldsBySection(fields: StudyField[]): { key: string; section: str
   }));
 }
 
-function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onMoveField, onMoveSection, onDuplicateField, onDeleteField }: {
+function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onMoveField, onMoveSection, onDuplicateSection, onApplyToAllForms, onDuplicateField, onDeleteField }: {
   form: StudyForm;
   filter: 'all' | ReviewStatus;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
@@ -958,6 +1016,8 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
   onDuplicateForm: () => void;
   onMoveField: (formId: string, fieldId: string, dir: -1 | 1) => void;
   onMoveSection: (formId: string, section: string | null, dir: -1 | 1) => void;
+  onDuplicateSection: (formId: string, section: string | null) => void;
+  onApplyToAllForms: (formId: string, section: string | null) => void;
   onDuplicateField: (formId: string, fieldId: string) => void;
   onDeleteField: (formId: string, fieldId: string) => void;
 }) {
@@ -1055,7 +1115,12 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
                   {group.fields.length} question{group.fields.length !== 1 ? 's' : ''}
                 </span>
                 {canReorder && (
-                  <span style={{ display: 'flex', gap: 4 }}>
+                  <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <button className="lift" title={`Duplicate the “${group.section}” section in this form`} onClick={() => onDuplicateSection(form.id, group.section)} style={reorderBtn(false)}><Copy size={12} /></button>
+                    <button className="lift" title={`Copy the “${group.section}” section to every form`} onClick={() => {
+                      if (window.confirm(`Add the “${group.section}” section to every form in the study that doesn’t already have it?`)) onApplyToAllForms(form.id, group.section);
+                    }} style={reorderBtn(false)}><CopyPlus size={12} /></button>
+                    <span style={{ width: 1, height: 14, background: '#e2e8f0', margin: '0 2px' }} />
                     <button className="lift" title="Move section up" disabled={gi === 0} onClick={() => onMoveSection(form.id, group.section, -1)} style={reorderBtn(gi === 0)}><ChevronUp size={13} /></button>
                     <button className="lift" title="Move section down" disabled={gi === groups.length - 1} onClick={() => onMoveSection(form.id, group.section, 1)} style={reorderBtn(gi === groups.length - 1)}><ChevronDown size={13} /></button>
                   </span>
