@@ -495,10 +495,12 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     }
   };
 
-  // Every field in every form approved → eligible for "My Saved E-Sources".
-  const fullyApproved = stats.total > 0 && stats.accepted === stats.total;
+  // Ready for "My Saved E-Sources" once every field has been REVIEWED (accepted
+  // or rejected — rejected fields are simply excluded from the eSource) and at
+  // least one field is kept. Pending fields still block the final save.
+  const fullyApproved = stats.total > 0 && stats.pending === 0 && stats.accepted > 0;
 
-  // Persist the study as a draft (partially reviewed) or final (fully approved).
+  // Persist the study as a draft (partially reviewed) or final (fully reviewed).
   const handleSave = async (status: 'draft' | 'final') => {
     if (status === 'final' && !fullyApproved) return;
     setSaving(status);
@@ -612,7 +614,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
               onClick={() => handleSave('final')}
               disabled={saving !== null || !fullyApproved}
               className="lift"
-              title={fullyApproved ? 'Save the fully-approved eSource' : `Approve all fields first (${stats.accepted}/${stats.total} approved)`}
+              title={fullyApproved ? 'Save the reviewed eSource' : stats.accepted === 0 ? 'Accept at least one field first' : `Review every field first (${stats.pending} pending)`}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
                 borderRadius: 9, border: '1px solid rgba(242,106,27,0.5)',
