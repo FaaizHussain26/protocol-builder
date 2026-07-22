@@ -3,7 +3,7 @@ import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
   Check, X, Pencil, FlaskConical, ListChecks, Plus,
   PenLine, Upload, FileText, CircleDot, Save, Trash2, RefreshCw, Copy, CopyPlus,
-  ChevronUp, ChevronDown, GripVertical, ArrowDownUp, Split, SlidersHorizontal,
+  ChevronDown, GripVertical, Split, SlidersHorizontal,
 } from 'lucide-react';
 import type {
   StudyModel, StudyField, StudyForm, StudyVisit, ReviewStatus,
@@ -23,18 +23,6 @@ interface EditTarget {
   formId: string;
   field: StudyField;
   isNew: boolean;
-}
-
-// Chronological sort key for the visit dropdown: order by study day (D#), then
-// by week (W#) as a fallback; continuous logs (AE/ConMed) sort to the end.
-function visitSortKey(v: StudyVisit): number {
-  if (v.kind === 'log') return Number.MAX_SAFE_INTEGER;
-  const hay = `${v.name} ${v.timing ?? ''}`;
-  const day = hay.match(/\bD(?:ay)?\s*(-?\d+)/i);
-  if (day) return parseInt(day[1], 10);
-  const week = hay.match(/\bW(?:ee?k)?\s*(-?\d+)/i);
-  if (week) return parseInt(week[1], 10) * 7;
-  return Number.MAX_SAFE_INTEGER - 1; // no parseable timing → just before logs
 }
 
 let newFieldCounter = 0;
@@ -295,20 +283,9 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   };
   const renameVisit = (visitId: string, name: string) =>
     setStudy({ ...study, visits: study.visits.map(v => v.id !== visitId ? v : { ...v, name }) });
-  // Reorder visits by swapping a visit with its neighbor (-1 = earlier, 1 = later).
-  const moveVisit = (visitId: string, dir: -1 | 1) => {
-    const visits = [...study.visits];
-    const i = visits.findIndex(v => v.id === visitId);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= visits.length) return;
-    [visits[i], visits[j]] = [visits[j], visits[i]];
-    setStudy({ ...study, visits });
-  };
-
-  // One-click chronological sort (by study day, then week; logs last). Optional —
-  // the dropdown otherwise follows the manual order set via the up/down controls.
-  const sortVisitsChronologically = () =>
-    setStudy({ ...study, visits: [...study.visits].sort((a, b) => visitSortKey(a) - visitSortKey(b)) });
+  // Reorder visits by drag-and-drop (see VisitPicker) — move index `from` to `to`.
+  const reorderVisitsByIndex = (from: number, to: number) =>
+    setStudy({ ...study, visits: arrayMove(study.visits, from, to) });
 
   const addForm = (visitId: string, name?: string) => {
     const f = { ...blankForm(), name: name || 'New Form' };
@@ -644,22 +621,12 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
               <label htmlFor="visit-select" style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase' }}>
                 Visit
               </label>
-              <select
-                id="visit-select"
-                value={activeVisit?.id ?? ''}
-                onChange={e => { setActiveVisitId(e.target.value); setActiveFormId(''); }}
-                style={{
-                  padding: '9px 32px 9px 12px', borderRadius: 9, border: '1.5px solid #cbd5e1',
-                  background: '#fff', fontSize: 14, fontWeight: 600, color: '#1e293b',
-                  fontFamily: 'inherit', cursor: 'pointer', minWidth: 280, maxWidth: '100%',
-                }}
-              >
-                {study.visits.map(v => (
-                  <option key={v.id} value={v.id}>
-                    {v.name}{v.timing ? ` — ${v.timing}` : ''}{v.kind === 'log' ? ' (log)' : ''}
-                  </option>
-                ))}
-              </select>
+              <VisitPicker
+                visits={study.visits}
+                activeVisitId={activeVisit?.id ?? ''}
+                onSelect={id => { setActiveVisitId(id); setActiveFormId(''); }}
+                onReorder={reorderVisitsByIndex}
+              />
               {activeVisit && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Pill>{activeVisit.kind === 'log' ? 'Continuous log' : 'Scheduled visit'}</Pill>
@@ -692,15 +659,8 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                 })}
               </div>
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-                {activeVisit && (() => {
-                  const vIdx = study.visits.findIndex(v => v.id === activeVisit.id);
-                  const first = vIdx <= 0, last = vIdx >= study.visits.length - 1;
-                  return (
+                {activeVisit && (
                   <>
-                    <button className="lift" title="Move visit earlier" disabled={first} onClick={() => moveVisit(activeVisit.id, -1)}
-                      style={{ ...visitCtlBtn, ...(first ? { color: '#cbd5e1', cursor: 'default' } : {}) }}><ChevronUp size={14} /></button>
-                    <button className="lift" title="Move visit later" disabled={last} onClick={() => moveVisit(activeVisit.id, 1)}
-                      style={{ ...visitCtlBtn, ...(last ? { color: '#cbd5e1', cursor: 'default' } : {}) }}><ChevronDown size={14} /></button>
                     <button className="lift" title="Rename visit" onClick={() => {
                       const n = window.prompt('Rename visit', activeVisit.name);
                       if (n && n.trim()) renameVisit(activeVisit.id, n.trim());
@@ -709,12 +669,6 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       if (window.confirm(`Delete visit "${activeVisit.name}" and its forms?`)) removeVisit(activeVisit.id);
                     }} style={visitCtlBtn}><Trash2 size={13} /></button>
                   </>
-                  );
-                })()}
-                {study.visits.length > 1 && (
-                  <button className="lift" title="Sort visits by study day" onClick={sortVisitsChronologically} style={visitCtlBtn}>
-                    <ArrowDownUp size={14} />
-                  </button>
                 )}
                 <button className="lift" onClick={addVisit} style={{ ...visitCtlBtn, color: '#2563eb', borderColor: '#bfdbfe', width: 'auto', padding: '0 11px', gap: 6, fontWeight: 600, fontSize: 12.5 }}>
                   <Plus size={14} /> Visit
@@ -1431,6 +1385,73 @@ function FieldInput({ field, disabled }: { field: StudyField; disabled: boolean 
     default:
       return <input type="text" disabled={disabled} placeholder="Enter response" style={base} />;
   }
+}
+
+// Visit selector — a custom dropdown (native <select> can't drag-sort options)
+// whose items can be reordered by dragging the grip handle.
+function VisitPicker({ visits, activeVisitId, onSelect, onReorder }: {
+  visits: StudyVisit[];
+  activeVisitId: string;
+  onSelect: (id: string) => void;
+  onReorder: (from: number, to: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const active = visits.find(v => v.id === activeVisitId);
+  const label = (v: StudyVisit) => `${v.name}${v.timing ? ` — ${v.timing}` : ''}${v.kind === 'log' ? ' (log)' : ''}`;
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    window.addEventListener('mousedown', h);
+    return () => window.removeEventListener('mousedown', h);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', minWidth: 280, maxWidth: '100%' }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 9,
+        border: '1.5px solid #cbd5e1', background: '#fff', fontSize: 14, fontWeight: 600, color: '#1e293b',
+        fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left',
+      }}>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {active ? label(active) : 'Select visit'}
+        </span>
+        <ChevronDown size={16} color="#64748b" style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} />
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', zIndex: 50, top: 'calc(100% + 4px)', left: 0, minWidth: '100%',
+          maxHeight: 380, overflowY: 'auto', background: '#fff', border: '1px solid #e2e8f0',
+          borderRadius: 10, boxShadow: '0 14px 34px rgba(15,23,42,0.20)', padding: 4,
+        }}>
+          <SortableList ids={visits.map(v => v.id)} onReorder={onReorder}>
+            {visits.map(v => (
+              <SortableRow key={v.id} id={v.id}>
+                {({ setNodeRef, style, handleProps }) => (
+                  <div ref={setNodeRef} style={{
+                    ...style, display: 'flex', alignItems: 'center', gap: 4, borderRadius: 8,
+                    background: v.id === activeVisitId ? '#eff6ff' : 'transparent',
+                  }}>
+                    <span {...handleProps} title="Drag to reorder" style={{ display: 'inline-flex', color: '#cbd5e1', cursor: 'grab', padding: '0 2px 0 5px', touchAction: 'none' }}>
+                      <GripVertical size={14} />
+                    </span>
+                    <button onClick={() => { onSelect(v.id); setOpen(false); }} style={{
+                      flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '8px 8px', fontSize: 13.5, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8,
+                    }}>
+                      {v.id === activeVisitId ? <Check size={14} color="#2563eb" style={{ flexShrink: 0 }} /> : <span style={{ width: 14, flexShrink: 0 }} />}
+                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(v)}</span>
+                    </button>
+                  </div>
+                )}
+              </SortableRow>
+            ))}
+          </SortableList>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // eSource Settings tab — drag-reorder the answer options of dropdown/select
