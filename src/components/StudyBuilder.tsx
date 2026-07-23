@@ -6,7 +6,7 @@ import {
   ChevronDown, GripVertical, Split, SlidersHorizontal,
 } from 'lucide-react';
 import type {
-  StudyModel, StudyField, StudyForm, StudyVisit, ReviewStatus,
+  StudyModel, StudyField, StudyForm, StudyVisit, StudyArm, ReviewStatus,
 } from '../types/study';
 import { regenerateForm, saveStudy } from '../utils/api';
 import { ALL_STANDARD_NAMES, canonicalRank } from '../utils/standardForms';
@@ -283,9 +283,14 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   };
   const renameVisit = (visitId: string, name: string) =>
     setStudy({ ...study, visits: study.visits.map(v => v.id !== visitId ? v : { ...v, name }) });
-  // Reorder visits by drag-and-drop (see VisitPicker) — move index `from` to `to`.
-  const reorderVisitsByIndex = (from: number, to: number) =>
+  // Reorder visits by drag-and-drop within an arm (see VisitPicker) — move the
+  // dragged visit to the drop target's position in the global visits array.
+  const reorderVisitsById = (fromId: string, toId: string) => {
+    const from = study.visits.findIndex(v => v.id === fromId);
+    const to = study.visits.findIndex(v => v.id === toId);
+    if (from < 0 || to < 0 || from === to) return;
     setStudy({ ...study, visits: arrayMove(study.visits, from, to) });
+  };
 
   const addForm = (visitId: string, name?: string) => {
     const f = { ...blankForm(), name: name || 'New Form' };
@@ -625,7 +630,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                 visits={study.visits}
                 activeVisitId={activeVisit?.id ?? ''}
                 onSelect={id => { setActiveVisitId(id); setActiveFormId(''); }}
-                onReorder={reorderVisitsByIndex}
+                onReorder={reorderVisitsById}
               />
               {activeVisit && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1389,11 +1394,15 @@ function FieldInput({ field, disabled }: { field: StudyField; disabled: boolean 
 
 // Visit selector — a custom dropdown (native <select> can't drag-sort options)
 // whose items can be reordered by dragging the grip handle.
+// Display order of arms in the visit tree.
+const ARM_ORDER: StudyArm[] = ['Study Visit', 'General', 'Unscheduled Visit', 'SAE', 'Early Termination', 'Reconsent'];
+const armRank = (a?: StudyArm) => { const i = ARM_ORDER.indexOf((a ?? 'Study Visit') as StudyArm); return i === -1 ? ARM_ORDER.length : i; };
+
 function VisitPicker({ visits, activeVisitId, onSelect, onReorder }: {
   visits: StudyVisit[];
   activeVisitId: string;
   onSelect: (id: string) => void;
-  onReorder: (from: number, to: number) => void;
+  onReorder: (fromId: string, toId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1407,6 +1416,10 @@ function VisitPicker({ visits, activeVisitId, onSelect, onReorder }: {
     return () => window.removeEventListener('mousedown', h);
   }, [open]);
 
+  // Group visits into arms (folders) in canonical arm order.
+  const arms = Array.from(new Set(visits.map(v => (v.arm ?? 'Study Visit') as StudyArm)))
+    .sort((a, b) => armRank(a) - armRank(b));
+
   return (
     <div ref={ref} style={{ position: 'relative', minWidth: 280, maxWidth: '100%' }}>
       <button onClick={() => setOpen(o => !o)} style={{
@@ -1415,39 +1428,48 @@ function VisitPicker({ visits, activeVisitId, onSelect, onReorder }: {
         fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left',
       }}>
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {active ? label(active) : 'Select visit'}
+          {active ? `${active.arm ?? 'Study Visit'} › ${label(active)}` : 'Select visit'}
         </span>
         <ChevronDown size={16} color="#64748b" style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} />
       </button>
       {open && (
         <div style={{
-          position: 'absolute', zIndex: 50, top: 'calc(100% + 4px)', left: 0, minWidth: '100%',
-          maxHeight: 380, overflowY: 'auto', background: '#fff', border: '1px solid #e2e8f0',
+          position: 'absolute', zIndex: 50, top: 'calc(100% + 4px)', left: 0, minWidth: 320,
+          maxHeight: 420, overflowY: 'auto', background: '#fff', border: '1px solid #e2e8f0',
           borderRadius: 10, boxShadow: '0 14px 34px rgba(15,23,42,0.20)', padding: 4,
         }}>
-          <SortableList ids={visits.map(v => v.id)} onReorder={onReorder}>
-            {visits.map(v => (
-              <SortableRow key={v.id} id={v.id}>
-                {({ setNodeRef, style, handleProps }) => (
-                  <div ref={setNodeRef} style={{
-                    ...style, display: 'flex', alignItems: 'center', gap: 4, borderRadius: 8,
-                    background: v.id === activeVisitId ? '#eff6ff' : 'transparent',
-                  }}>
-                    <span {...handleProps} title="Drag to reorder" style={{ display: 'inline-flex', color: '#cbd5e1', cursor: 'grab', padding: '0 2px 0 5px', touchAction: 'none' }}>
-                      <GripVertical size={14} />
-                    </span>
-                    <button onClick={() => { onSelect(v.id); setOpen(false); }} style={{
-                      flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
-                      padding: '8px 8px', fontSize: 13.5, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8,
-                    }}>
-                      {v.id === activeVisitId ? <Check size={14} color="#2563eb" style={{ flexShrink: 0 }} /> : <span style={{ width: 14, flexShrink: 0 }} />}
-                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(v)}</span>
-                    </button>
-                  </div>
-                )}
-              </SortableRow>
-            ))}
-          </SortableList>
+          {arms.map(arm => {
+            const armVisits = visits.filter(v => (v.arm ?? 'Study Visit') === arm);
+            const ids = armVisits.map(v => v.id);
+            return (
+              <div key={arm} style={{ marginBottom: 4 }}>
+                <p style={{ fontSize: 10.5, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: 0.4, padding: '6px 8px 2px' }}>{arm}</p>
+                <SortableList ids={ids} onReorder={(from, to) => onReorder(ids[from], ids[to])}>
+                  {armVisits.map(v => (
+                    <SortableRow key={v.id} id={v.id}>
+                      {({ setNodeRef, style, handleProps }) => (
+                        <div ref={setNodeRef} style={{
+                          ...style, display: 'flex', alignItems: 'center', gap: 4, borderRadius: 8,
+                          background: v.id === activeVisitId ? '#eff6ff' : 'transparent',
+                        }}>
+                          <span {...handleProps} title="Drag to reorder" style={{ display: 'inline-flex', color: '#cbd5e1', cursor: 'grab', padding: '0 2px 0 5px', touchAction: 'none' }}>
+                            <GripVertical size={14} />
+                          </span>
+                          <button onClick={() => { onSelect(v.id); setOpen(false); }} style={{
+                            flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
+                            padding: '8px 8px', fontSize: 13.5, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8,
+                          }}>
+                            {v.id === activeVisitId ? <Check size={14} color="#2563eb" style={{ flexShrink: 0 }} /> : <span style={{ width: 14, flexShrink: 0 }} />}
+                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(v)}</span>
+                          </button>
+                        </div>
+                      )}
+                    </SortableRow>
+                  ))}
+                </SortableList>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

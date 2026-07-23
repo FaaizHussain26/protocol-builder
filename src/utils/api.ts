@@ -67,7 +67,10 @@ async function req<T>(path: string, init?: RequestInit, retries = 3): Promise<T>
 // The build runs for minutes (skeleton + many per-form enrichment calls), longer
 // than a hosting proxy keeps a connection open. So the server returns a job id
 // immediately and we poll for the result — each request stays short-lived.
-type BuildStatus = { status: 'pending' | 'done' | 'error'; study?: StudyModel; error?: string };
+// A live folder row streamed during the build (arm → folder → form names).
+export interface BuildTreeRow { arm: string; folder: string; kind: string; forms: { name: string; fieldCount: number }[] }
+export interface BuildProgress { phase?: string; progress?: number; partial?: BuildTreeRow[] }
+type BuildStatus = BuildProgress & { status: 'pending' | 'done' | 'error'; study?: StudyModel; error?: string };
 
 const BUILD_POLL_MS = 3000;
 const BUILD_MAX_WAIT_MS = 20 * 60 * 1000; // give up after 20 minutes
@@ -78,6 +81,7 @@ export async function buildStudyFromDocuments(
   documents: IngestedDocument[],
   options: BuildOptions = {},
   templatePreferences?: TemplatePreferences,
+  onProgress?: (p: BuildProgress) => void,
 ): Promise<StudyModel> {
   const { jobId } = await req<{ jobId: string }>('/api/build', {
     method: 'POST',
@@ -97,6 +101,7 @@ export async function buildStudyFromDocuments(
       if (++fails >= BUILD_MAX_POLL_FAILS) throw e;
       continue;
     }
+    onProgress?.({ phase: s.phase, progress: s.progress, partial: s.partial });
     if (s.status === 'done' && s.study) return s.study;
     if (s.status === 'error') throw new Error(s.error || 'Build failed on the server.');
     if (Date.now() - start > BUILD_MAX_WAIT_MS) throw new Error('Build timed out. Please try again.');

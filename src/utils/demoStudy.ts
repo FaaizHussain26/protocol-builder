@@ -15,7 +15,7 @@ export const DEMO_STUDY: StudyModel = {
   ],
   visits: [
     {
-      id: 'v1', name: 'Screening', kind: 'visit', timing: 'Day -28 to -1',
+      id: 'v1', name: 'Screening', kind: 'visit', arm: 'Study Visit', timing: 'Day -28 to -1',
       forms: [
         {
           id: 'v1f1', name: 'Demographics', appliedTemplate: null,
@@ -50,7 +50,7 @@ export const DEMO_STUDY: StudyModel = {
       ],
     },
     {
-      id: 'v2', name: 'Baseline / Day 1', kind: 'visit', timing: 'Day 1',
+      id: 'v2', name: 'Baseline / Day 1', kind: 'visit', arm: 'Study Visit', timing: 'Day 1',
       forms: [
         {
           id: 'v2f1', name: 'Randomization', appliedTemplate: null,
@@ -63,7 +63,7 @@ export const DEMO_STUDY: StudyModel = {
       ],
     },
     {
-      id: 'v3', name: 'End of Treatment', kind: 'visit', timing: 'Week 12', window: '±5 days',
+      id: 'v3', name: 'End of Treatment', kind: 'visit', arm: 'Study Visit', timing: 'Week 12', window: '±5 days',
       forms: [
         {
           id: 'v3f1', name: 'End of Treatment', appliedTemplate: null,
@@ -78,7 +78,7 @@ export const DEMO_STUDY: StudyModel = {
       ],
     },
     {
-      id: 'log1', name: 'Adverse Event Log', kind: 'log',
+      id: 'log1', name: 'Adverse Event Log', kind: 'log', arm: 'General',
       forms: [
         {
           id: 'log1f1', name: 'Adverse Events', appliedTemplate: 'Adverse Event Log',
@@ -101,7 +101,7 @@ export const DEMO_STUDY: StudyModel = {
       ],
     },
     {
-      id: 'log2', name: 'Concomitant Medication Log', kind: 'log',
+      id: 'log2', name: 'Concomitant Medication Log', kind: 'log', arm: 'General',
       forms: [
         {
           id: 'log2f1', name: 'Concomitant Medications', appliedTemplate: 'Concomitant Medication Log',

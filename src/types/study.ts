@@ -128,6 +128,15 @@ export interface FormAlert {
 }
 
 // A visit or log in the study schedule.
+// A study "arm" — the top-level folder grouping a set of visits belong to.
+export type StudyArm =
+  | 'General'
+  | 'Study Visit'
+  | 'Unscheduled Visit'
+  | 'SAE'
+  | 'Early Termination'
+  | 'Reconsent';
+
 export interface StudyVisit {
   id: string;
   name: string;
@@ -137,6 +146,8 @@ export interface StudyVisit {
   timing?: string;
   /** e.g. "−3 to +3 days" */
   window?: string;
+  /** Top-level arm (folder) this visit belongs to. Defaults to 'Study Visit'. */
+  arm?: StudyArm;
   forms: StudyForm[];
 }
 

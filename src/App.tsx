@@ -14,7 +14,7 @@ import Dashboard from './components/Dashboard';
 import PassLock, { isUnlocked, lockApp } from './components/PassLock';
 import { extractTextFromFiles } from './utils/extractText';
 import { buildStudyFromDocuments, listTemplates } from './utils/api';
-import type { BuildOptions } from './utils/api';
+import type { BuildOptions, BuildTreeRow } from './utils/api';
 import type { StudyModel, IngestedDocument, Template } from './types/study';
 import { DEMO_STUDY } from './utils/demoStudy';
 
@@ -69,6 +69,8 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [ingestIndex, setIngestIndex] = useState(0);
   const [stageMsg, setStageMsg] = useState('');
+  // Live build tree streamed from the server (arm → folder → forms).
+  const [buildTree, setBuildTree] = useState<BuildTreeRow[]>([]);
 
   // Load saved templates (when a backend is configured) for the build options.
   const loadTemplates = () => { if (CONFIGURED) listTemplates().then(setTemplates).catch(() => {}); };
@@ -84,6 +86,7 @@ export default function App() {
     setError(null);
     setStep('processing');
     setProgress(8);
+    setBuildTree([]);
 
     try {
       // Ingestion: walk each document so the user sees them being read.
@@ -106,13 +109,16 @@ export default function App() {
       setCorpusText(text);
       setProgress(52);
 
-      setStageMsg('AI is building the structured study (visits → forms → fields)...');
+      setStageMsg('AI is building the structured study…');
       const prefs = templates.find(t => t.id === options.templateId)?.preferences;
-      const built = await buildStudyFromDocuments(text, documents, options, prefs);
-      setProgress(92);
-
-      setStageMsg('Assembling review workspace...');
-      await new Promise(r => setTimeout(r, 400));
+      // Live progress streams from the server: real phase, percent, and the
+      // arm → folder → form tree filling in as each form is built.
+      const built = await buildStudyFromDocuments(text, documents, options, prefs, (p) => {
+        if (p.phase) setStageMsg(p.phase);
+        if (typeof p.progress === 'number') setProgress(50 + Math.round(p.progress * 0.48));
+        if (p.partial) setBuildTree(p.partial);
+      });
+      setProgress(99);
 
       setStudy(built);
       setCurrentStudyId(undefined); // a fresh, unsaved build
@@ -343,6 +349,36 @@ export default function App() {
               }} />
             </div>
             <p style={{ fontSize: 13, color: '#94a3b8' }}>{progress}% complete</p>
+
+            {/* Live build tree — arms → folders → forms filling in as the AI works */}
+            {buildTree.length > 0 && (() => {
+              const arms = Array.from(new Set(buildTree.map(r => r.arm)));
+              return (
+                <div style={{ width: 480, maxWidth: '100%', marginTop: 24, textAlign: 'left', maxHeight: 300, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', padding: '12px 14px' }}>
+                  {arms.map(arm => (
+                    <div key={arm} style={{ marginBottom: 10 }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>{arm}</p>
+                      {buildTree.filter(r => r.arm === arm).map((r, i) => (
+                        <div key={`${r.folder}-${i}`} style={{ paddingLeft: 8, marginBottom: 3 }}>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>{r.folder}</p>
+                          <div style={{ paddingLeft: 10, display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
+                            {r.forms.map((f, j) => (
+                              <span key={`${f.name}-${j}`} style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11,
+                                color: f.fieldCount > 0 ? '#15803d' : '#94a3b8',
+                              }}>
+                                {f.fieldCount > 0 ? <CheckCircle2 size={11} /> : <Loader size={11} style={{ animation: 'spin 1s linear infinite' }} />}
+                                {f.name}{f.fieldCount > 0 ? ` (${f.fieldCount})` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
 

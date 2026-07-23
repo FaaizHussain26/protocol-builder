@@ -36,6 +36,19 @@ function pdfSafe(s: string): string {
   return out;
 }
 
+// Group visits by arm (folder) in canonical order for the export.
+const PDF_ARM_ORDER = ['Study Visit', 'General', 'Unscheduled Visit', 'SAE', 'Early Termination', 'Reconsent'];
+function armGroups(visits: StudyModel['visits']): { arm: string; visits: StudyModel['visits'] }[] {
+  const map = new Map<string, StudyModel['visits']>();
+  for (const v of visits) {
+    const a = v.arm ?? 'Study Visit';
+    if (!map.has(a)) map.set(a, []);
+    map.get(a)!.push(v);
+  }
+  const rank = (x: string) => { const i = PDF_ARM_ORDER.indexOf(x); return i === -1 ? PDF_ARM_ORDER.length : i; };
+  return [...map.keys()].sort((a, b) => rank(a) - rank(b)).map((arm) => ({ arm, visits: map.get(arm)! }));
+}
+
 function setup(study: StudyModel, subtitle: string) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
@@ -95,7 +108,16 @@ export function generateCompletionGuidelinesPDF(study: StudyModel): void {
   doc.text(`Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, mL, y);
   y += 10;
 
-  for (const visit of study.visits) {
+  for (const grp of armGroups(study.visits)) {
+    br(14);
+    doc.setFillColor(124, 58, 237);
+    doc.rect(mL, y, contentW, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text(`ARM: ${grp.arm}`, mL + 3, y + 5.5);
+    y += 12;
+    for (const visit of grp.visits) {
     for (const form of visit.forms) {
       const fields = form.fields.filter(f => f.reviewStatus !== 'rejected' && f.completionGuidance);
       if (fields.length === 0) continue;
@@ -125,6 +147,7 @@ export function generateCompletionGuidelinesPDF(study: StudyModel): void {
         y += g.length * 4.4 + 5;
       }
       y += 3;
+    }
     }
   }
 
@@ -248,8 +271,17 @@ export function generateBuildSpecPDF(study: StudyModel, stats: DocStats): void {
   doc.text(`Source documents: ${study.documents.map(d => d.name).join(', ') || '—'}`, mL + 3, y);
   y += 9;
 
-  // Visit schedule + form summaries
-  for (const visit of study.visits) {
+  // Arm → Visit schedule + form summaries
+  for (const grp of armGroups(study.visits)) {
+    br(12);
+    doc.setFillColor(124, 58, 237);
+    doc.rect(mL, y, contentW, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text(`ARM: ${grp.arm}`, mL + 3, y + 5.5);
+    y += 12;
+    for (const visit of grp.visits) {
     br(16);
     doc.setFillColor(241, 245, 249);
     doc.rect(mL, y, contentW, 9, 'F');
@@ -296,6 +328,7 @@ export function generateBuildSpecPDF(study: StudyModel, stats: DocStats): void {
       y += 3;
     }
     y += 3;
+  }
   }
 
   // Eligibility appendix
