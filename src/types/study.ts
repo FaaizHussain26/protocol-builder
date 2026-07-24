@@ -106,6 +106,8 @@ export interface StudyForm {
   id: string;
   name: string;
   description?: string;
+  /** Free-text header/instructions shown at the top of the form. */
+  header?: string;
   /** If a standard template was applied (AE log, ConMed, vitals, med history). */
   appliedTemplate?: string | null;
   /** Per-form prompt used to (re)generate this form during review. */
@@ -146,8 +148,9 @@ export interface StudyVisit {
   timing?: string;
   /** e.g. "−3 to +3 days" */
   window?: string;
-  /** Top-level arm (folder) this visit belongs to. Defaults to 'Study Visit'. */
-  arm?: StudyArm;
+  /** Top-level arm (main folder) this visit belongs to — a StudyArm or any
+   *  custom arm name the user creates. Defaults to 'Study Visit'. */
+  arm?: string;
   forms: StudyForm[];
 }
 

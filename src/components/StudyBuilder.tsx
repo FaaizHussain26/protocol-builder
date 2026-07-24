@@ -3,10 +3,10 @@ import {
   Layers, ClipboardCheck, AlertTriangle, FileOutput, RotateCcw,
   Check, X, Pencil, FlaskConical, ListChecks, Plus,
   PenLine, Upload, FileText, CircleDot, Save, Trash2, RefreshCw, Copy, CopyPlus,
-  ChevronDown, GripVertical, Split, SlidersHorizontal,
+  ChevronDown, GripVertical, Split, SlidersHorizontal, FolderTree, Folder,
 } from 'lucide-react';
 import type {
-  StudyModel, StudyField, StudyForm, StudyVisit, StudyArm, ReviewStatus,
+  StudyModel, StudyField, StudyForm, StudyVisit, ReviewStatus,
 } from '../types/study';
 import { regenerateForm, saveStudy } from '../utils/api';
 import { ALL_STANDARD_NAMES, canonicalRank } from '../utils/standardForms';
@@ -104,7 +104,7 @@ interface StudyBuilderProps {
   onTabChange?: (t: Tab) => void;
 }
 
-export type Tab = 'build' | 'eligibility' | 'intelligence' | 'export' | 'settings';
+export type Tab = 'build' | 'folders' | 'eligibility' | 'intelligence' | 'export' | 'settings';
 
 export default function StudyBuilder({ study, setStudy, onReset, studyId, protocolText, onStudyIdChange, autoSaveEnabled, tab: controlledTab, onTabChange }: StudyBuilderProps) {
   const [internalTab, setInternalTab] = useState<Tab>('build');
@@ -292,6 +292,22 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     setStudy({ ...study, visits: arrayMove(study.visits, from, to) });
   };
 
+  // ---- Arms (main folders) & the Folders tab ----
+  const addArm = () => {
+    const existing = new Set(study.visits.map(v => v.arm ?? 'Study Visit'));
+    let n = 1; while (existing.has(`New Arm ${n}`)) n += 1;
+    setStudy({ ...study, visits: [...study.visits, { ...blankVisit(), name: 'New Folder', arm: `New Arm ${n}` }] });
+  };
+  const addFolderToArm = (arm: string) =>
+    setStudy({ ...study, visits: [...study.visits, { ...blankVisit(), name: 'New Folder', arm }] });
+  const renameArm = (oldName: string, newName: string) => {
+    const name = newName.trim(); if (!name || name === oldName) return;
+    setStudy({ ...study, visits: study.visits.map(v => (v.arm ?? 'Study Visit') === oldName ? { ...v, arm: name } : v) });
+  };
+  // Replace the whole visits array — used by the Folders tab drag tree, which
+  // recomputes both order and each folder's arm from the dropped position.
+  const setVisits = (next: StudyVisit[]) => setStudy({ ...study, visits: next });
+
   const addForm = (visitId: string, name?: string) => {
     const f = { ...blankForm(), name: name || 'New Form' };
     setStudy({ ...study, visits: study.visits.map(v => v.id !== visitId ? v : { ...v, forms: [...v.forms, f] }) });
@@ -336,6 +352,29 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
         return { ...rest, id: `fld-sec-${stamp}-${i}`, section: name, reviewStatus: 'pending' as ReviewStatus };
       });
       return groups.flatMap((g, idx) => idx === gi ? [...g.fields, ...copies] : g.fields);
+    });
+
+  // Add a repeated section: turn the form's current fields into "Section 1" (if
+  // not already sectioned) and append an identical copy as the next section.
+  const addSection = (formId: string) =>
+    mapFormFields(formId, fields => {
+      if (!fields.length) return fields;
+      let working = fields;
+      const g0 = groupFieldsBySection(working);
+      if (g0.length === 1 && g0[0].section == null) working = working.map(f => ({ ...f, section: 'Section 1' }));
+      const groups = groupFieldsBySection(working);
+      const first = groups[0];
+      const base = (first.section || 'Section').replace(/\s+\d+$/, '').trim() || 'Section';
+      const taken = new Set(groups.map(g => g.section));
+      let n = 2; while (taken.has(`${base} ${n}`)) n += 1;
+      newFieldCounter += 1;
+      const stamp = `${Date.now()}-${newFieldCounter}`;
+      const copies = first.fields.map((f, i) => {
+        const { editedByUser, aiOriginal, ...rest } = f;
+        void editedByUser; void aiOriginal;
+        return { ...rest, id: `fld-sec-${stamp}-${i}`, section: `${base} ${n}`, reviewStatus: 'pending' as ReviewStatus };
+      });
+      return [...working, ...copies];
     });
 
   // Copy a section (e.g. a required Signature block) into EVERY form in the
@@ -477,6 +516,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'build', label: 'Study Build', icon: <Layers size={15} /> },
+    { id: 'folders', label: 'Folders', icon: <FolderTree size={15} /> },
     { id: 'eligibility', label: 'Eligibility', icon: <ListChecks size={15} />, badge: study.eligibility.length },
     { id: 'intelligence', label: 'Intelligence', icon: <AlertTriangle size={15} />, badge: study.findings.filter(f => !f.resolved).length },
     { id: 'settings', label: 'eSource Settings', icon: <SlidersHorizontal size={15} /> },
@@ -819,6 +859,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       onDeleteForm={() => activeVisit && removeForm(activeVisit.id, activeForm.id)}
                       onDuplicateForm={() => activeVisit && duplicateForm(activeVisit.id, activeForm.id)}
                       onReorderFields={reorderFormFields}
+                      onAddSection={addSection}
                       onDuplicateSection={duplicateSection}
                       onApplyToAllForms={applySectionToAllForms}
                       onDuplicateField={duplicateField}
@@ -833,6 +874,18 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
           </div>
         )}
 
+        {tab === 'folders' && (
+          <FoldersPanel
+            visits={study.visits}
+            onAddArm={addArm}
+            onAddFolder={addFolderToArm}
+            onRenameArm={renameArm}
+            onRenameFolder={renameVisit}
+            onDeleteFolder={removeVisit}
+            onReorder={setVisits}
+            onOpenFolder={(id) => { setActiveVisitId(id); setActiveFormId(''); setTab('build'); }}
+          />
+        )}
         {tab === 'settings' && (
           <SettingsPanel
             visits={study.visits}
@@ -913,7 +966,7 @@ function groupFieldsBySection(fields: StudyField[]): { key: string; section: str
   }));
 }
 
-function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onReorderFields, onDuplicateSection, onApplyToAllForms, onDuplicateField, onDeleteField }: {
+function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onReorderFields, onAddSection, onDuplicateSection, onApplyToAllForms, onDuplicateField, onDeleteField }: {
   form: StudyForm;
   filter: 'all' | ReviewStatus;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
@@ -927,6 +980,7 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
   onDeleteForm: () => void;
   onDuplicateForm: () => void;
   onReorderFields: (formId: string, next: StudyField[]) => void;
+  onAddSection: (formId: string) => void;
   onDuplicateSection: (formId: string, section: string | null) => void;
   onApplyToAllForms: (formId: string, section: string | null) => void;
   onDuplicateField: (formId: string, fieldId: string) => void;
@@ -952,6 +1006,7 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
           <SmallBtn active={form.fields.length > 0 && form.fields.every(f => f.reviewStatus === 'rejected')}
             activeBg="#fee2e2" activeFg="#b91c1c"
             onClick={() => onFormReview(form.id, 'rejected')}><X size={13} /> Reject all</SmallBtn>
+          <SmallBtn active={false} onClick={() => onAddSection(form.id)}><Plus size={13} /> Add section</SmallBtn>
           <button className="lift" title="Customize prompt / regenerate" onClick={() => setShowPrompt(s => !s)} style={visitCtlBtn}>
             <RefreshCw size={13} color={showPrompt ? '#2563eb' : '#64748b'} />
           </button>
@@ -965,6 +1020,22 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
           }} style={visitCtlBtn}><Trash2 size={13} /></button>
         </div>
         {form.description && <p style={{ fontSize: 12.5, color: '#64748b', marginTop: 4 }}>{form.description}</p>}
+      </div>
+
+      {/* Form header / instructions — free text shown at the top of the form */}
+      <div style={{ padding: '10px 18px', background: '#fffdf5', borderBottom: '1px solid #f1f5f9' }}>
+        <label style={{ fontSize: 10.5, fontWeight: 700, color: '#b45309', letterSpacing: 0.3, textTransform: 'uppercase' }}>Header / instructions</label>
+        <textarea
+          value={form.header ?? ''}
+          onChange={e => onUpdateForm(form.id, { header: e.target.value })}
+          placeholder="Add instructions or a header shown at the top of this form…"
+          rows={form.header ? 2 : 1}
+          style={{
+            width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 8,
+            border: '1px solid #fde68a', background: '#fff', fontSize: 13, fontFamily: 'inherit',
+            color: '#1e293b', resize: 'vertical', boxSizing: 'border-box', outline: 'none', lineHeight: 1.5,
+          }}
+        />
       </div>
 
       {/* Per-form prompt + regenerate */}
@@ -1394,9 +1465,16 @@ function FieldInput({ field, disabled }: { field: StudyField; disabled: boolean 
 
 // Visit selector — a custom dropdown (native <select> can't drag-sort options)
 // whose items can be reordered by dragging the grip handle.
-// Display order of arms in the visit tree.
-const ARM_ORDER: StudyArm[] = ['Study Visit', 'General', 'Unscheduled Visit', 'SAE', 'Early Termination', 'Reconsent'];
-const armRank = (a?: StudyArm) => { const i = ARM_ORDER.indexOf((a ?? 'Study Visit') as StudyArm); return i === -1 ? ARM_ORDER.length : i; };
+// Display order of the known arms in the tree; custom arms sort after these.
+const ARM_ORDER: string[] = ['Study Visit', 'General', 'Unscheduled Visit', 'SAE', 'Early Termination', 'Reconsent'];
+const armRank = (a?: string) => { const i = ARM_ORDER.indexOf(a ?? 'Study Visit'); return i === -1 ? ARM_ORDER.length : i; };
+// Stable arm ordering: known arms first (canonical order), then custom arms in
+// first-seen order so a newly created arm keeps its place.
+function orderedArms(visits: StudyVisit[]): string[] {
+  const seen: string[] = [];
+  for (const v of visits) { const a = v.arm ?? 'Study Visit'; if (!seen.includes(a)) seen.push(a); }
+  return seen.sort((a, b) => (armRank(a) - armRank(b)) || (seen.indexOf(a) - seen.indexOf(b)));
+}
 
 function VisitPicker({ visits, activeVisitId, onSelect, onReorder }: {
   visits: StudyVisit[];
@@ -1417,8 +1495,7 @@ function VisitPicker({ visits, activeVisitId, onSelect, onReorder }: {
   }, [open]);
 
   // Group visits into arms (folders) in canonical arm order.
-  const arms = Array.from(new Set(visits.map(v => (v.arm ?? 'Study Visit') as StudyArm)))
-    .sort((a, b) => armRank(a) - armRank(b));
+  const arms = orderedArms(visits);
 
   return (
     <div ref={ref} style={{ position: 'relative', minWidth: 280, maxWidth: '100%' }}>
@@ -1475,6 +1552,81 @@ function VisitPicker({ visits, activeVisitId, onSelect, onReorder }: {
     </div>
   );
 }
+
+// Folders tab — arms (main folders) → folders (visits). Create/rename arms,
+// add/rename/delete folders, and drag folders across arms (a flat sortable list
+// of arm-headers + folder-rows; the drop position sets each folder's arm).
+function FoldersPanel({ visits, onAddArm, onAddFolder, onRenameArm, onRenameFolder, onDeleteFolder, onReorder, onOpenFolder }: {
+  visits: StudyVisit[];
+  onAddArm: () => void;
+  onAddFolder: (arm: string) => void;
+  onRenameArm: (oldName: string, newName: string) => void;
+  onRenameFolder: (id: string, name: string) => void;
+  onDeleteFolder: (id: string) => void;
+  onReorder: (next: StudyVisit[]) => void;
+  onOpenFolder: (id: string) => void;
+}) {
+  type Item = { kind: 'arm'; id: string; arm: string } | { kind: 'folder'; id: string; visit: StudyVisit };
+  const items: Item[] = [];
+  for (const arm of orderedArms(visits)) {
+    items.push({ kind: 'arm', id: `arm::${arm}`, arm });
+    for (const v of visits.filter(x => (x.arm ?? 'Study Visit') === arm)) items.push({ kind: 'folder', id: v.id, visit: v });
+  }
+  const onDrop = (from: number, to: number) => {
+    const next = arrayMove(items, from, to);
+    let cur = 'Study Visit';
+    const out: StudyVisit[] = [];
+    for (const it of next) {
+      if (it.kind === 'arm') cur = it.arm;
+      else out.push({ ...it.visit, arm: cur });
+    }
+    onReorder(out);
+  };
+  const grip = (handleProps: Record<string, unknown>) => (
+    <span {...handleProps} title="Drag to reorder / move to another arm" style={{ display: 'inline-flex', color: '#cbd5e1', cursor: 'grab', touchAction: 'none' }}><GripVertical size={15} /></span>
+  );
+  return (
+    <div className="anim-form" style={{ maxWidth: 760, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <FolderTree size={18} color="#2563eb" />
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>Folders</h2>
+        <span style={{ fontSize: 12, color: '#94a3b8', flex: 1 }}>Drag a folder onto another arm to move it. Arms are main folders.</span>
+        <button className="lift" onClick={onAddArm} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+          <Plus size={14} /> New arm
+        </button>
+      </div>
+      <SortableList ids={items.map(i => i.id)} onReorder={onDrop}>
+        {items.map(it => (
+          <SortableRow key={it.id} id={it.id}>
+            {({ setNodeRef, style, handleProps }) => (
+              it.kind === 'arm' ? (
+                <div ref={setNodeRef} style={{ ...style, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', marginTop: 10, background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 9 }}>
+                  {grip(handleProps)}
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: 0.4, flex: 1 }}>{it.arm}</span>
+                  <button className="lift" title="Rename arm" onClick={() => { const n = window.prompt('Rename arm', it.arm); if (n) onRenameArm(it.arm, n); }} style={miniIconBtn}><Pencil size={13} /></button>
+                  <button className="lift" title="Add folder to this arm" onClick={() => onAddFolder(it.arm)} style={{ ...miniIconBtn, width: 'auto', padding: '0 9px', gap: 5, color: '#2563eb', borderColor: '#bfdbfe', fontSize: 12, fontWeight: 600 }}><Plus size={13} /> Folder</button>
+                </div>
+              ) : (
+                <div ref={setNodeRef} style={{ ...style, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', marginLeft: 20, marginTop: 4, background: '#fafbfc', border: '1px solid #e8edf4', borderRadius: 9 }}>
+                  {grip(handleProps)}
+                  <Folder size={14} color="#94a3b8" style={{ flexShrink: 0 }} />
+                  <button onClick={() => onOpenFolder(it.id)} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 600, color: '#1e293b' }}>
+                    {it.visit.name}
+                    <span style={{ fontSize: 11, fontWeight: 500, color: '#94a3b8' }}> · {it.visit.forms.length} form{it.visit.forms.length !== 1 ? 's' : ''}</span>
+                  </button>
+                  <button className="lift" title="Rename folder" onClick={() => { const n = window.prompt('Rename folder', it.visit.name); if (n && n.trim()) onRenameFolder(it.id, n.trim()); }} style={miniIconBtn}><Pencil size={13} /></button>
+                  <button className="lift" title="Delete folder" onClick={() => { if (window.confirm(`Delete folder "${it.visit.name}" and its forms?`)) onDeleteFolder(it.id); }} style={{ ...miniIconBtn, color: '#dc2626', borderColor: '#fecaca' }}><Trash2 size={13} /></button>
+                </div>
+              )
+            )}
+          </SortableRow>
+        ))}
+      </SortableList>
+    </div>
+  );
+}
+
+const miniIconBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer', flexShrink: 0 };
 
 // eSource Settings tab — drag-reorder the answer options of dropdown/select
 // fields in the active form.

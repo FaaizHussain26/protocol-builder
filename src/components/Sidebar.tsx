@@ -1,13 +1,13 @@
 import {
   Layers, Sparkles, FolderOpen, SlidersHorizontal, ListChecks,
-  AlertTriangle, FileOutput, Lock, LayoutDashboard, PenLine, Trash2,
+  AlertTriangle, FileOutput, Lock, LayoutDashboard, PenLine, Trash2, FolderTree,
 } from 'lucide-react';
 import type { StudyModel } from '../types/study';
 
 export const SIDEBAR_WIDTH = 240;
 
 export type AppView = 'dashboard' | 'builder' | 'library' | 'drafts' | 'templates' | 'trash';
-export type StudyTab = 'build' | 'eligibility' | 'intelligence' | 'export' | 'settings';
+export type StudyTab = 'build' | 'folders' | 'eligibility' | 'intelligence' | 'export' | 'settings';
 
 interface SidebarProps {
   view: AppView;
@@ -81,6 +81,8 @@ export default function Sidebar({
           </p>
           <NavItem icon={<Layers size={15} />} label="Study Build"
             active={view === 'builder' && studyTab === 'build'} onClick={() => onStudyTab('build')} />
+          <NavItem icon={<FolderTree size={15} />} label="Folders"
+            active={view === 'builder' && studyTab === 'folders'} onClick={() => onStudyTab('folders')} />
           <NavItem icon={<ListChecks size={15} />} label="Eligibility" badge={study.eligibility.length || undefined}
             active={view === 'builder' && studyTab === 'eligibility'} onClick={() => onStudyTab('eligibility')} />
           <NavItem icon={<AlertTriangle size={15} />} label="Intelligence" badge={unresolved || undefined}
