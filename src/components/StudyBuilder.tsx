@@ -614,16 +614,6 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
         </div>
       </div>
 
-      {/* Disclaimer */}
-      <div style={{
-        background: '#fffbeb', borderBottom: '1px solid #fde68a',
-        padding: '8px 32px', fontSize: 12, color: '#92400e',
-        display: 'flex', alignItems: 'center', gap: 8,
-      }}>
-        <AlertTriangle size={13} />
-        Conceptual reference only. Every AI output is a draft a human approves — the production build will be more refined, customized, and aligned with final workflow and specifications.
-      </div>
-
       {/* Tab nav — hidden when the app sidebar controls the section */}
       <div style={{
         background: '#fff', borderBottom: '1px solid #e2e8f0',
