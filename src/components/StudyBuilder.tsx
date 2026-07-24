@@ -377,6 +377,33 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
       return [...working, ...copies];
     });
 
+  // Copy the ENTIRE form's content into itself: clone every field (all
+  // sections) with fresh ids and append it as a second block. Copied sections
+  // are suffixed "(copy)" so the duplicate stays distinct from the original.
+  const duplicateFormContent = (formId: string) =>
+    mapFormFields(formId, fields => {
+      if (!fields.length) return fields;
+      newFieldCounter += 1;
+      const stamp = `${Date.now()}-${newFieldCounter}`;
+      const existing = new Set(fields.map(f => f.section?.trim() || null).filter(Boolean) as string[]);
+      const copyName = new Map<string | null, string>();
+      for (const f of fields) {
+        const key = f.section?.trim() || null;
+        if (copyName.has(key)) continue;
+        const stem = key ? `${key} (copy)` : 'Copy';
+        let name = stem, n = 2;
+        while (existing.has(name)) { name = key ? `${key} (copy ${n})` : `Copy ${n}`; n += 1; }
+        existing.add(name);
+        copyName.set(key, name);
+      }
+      const copies = fields.map((f, i) => {
+        const { editedByUser, aiOriginal, ...rest } = f;
+        void editedByUser; void aiOriginal;
+        return { ...rest, id: `fld-fcopy-${stamp}-${i}`, section: copyName.get(f.section?.trim() || null)!, reviewStatus: 'pending' as ReviewStatus };
+      });
+      return [...fields, ...copies];
+    });
+
   // Copy a section (e.g. a required Signature block) into EVERY form in the
   // study. Build it once, then stamp it onto every page. Idempotent: the source
   // form and any form that already has a section of that name are skipped.
@@ -850,6 +877,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       onDuplicateForm={() => activeVisit && duplicateForm(activeVisit.id, activeForm.id)}
                       onReorderFields={reorderFormFields}
                       onAddSection={addSection}
+                      onDuplicateContent={duplicateFormContent}
                       onDuplicateSection={duplicateSection}
                       onApplyToAllForms={applySectionToAllForms}
                       onDuplicateField={duplicateField}
@@ -956,7 +984,7 @@ function groupFieldsBySection(fields: StudyField[]): { key: string; section: str
   }));
 }
 
-function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onReorderFields, onAddSection, onDuplicateSection, onApplyToAllForms, onDuplicateField, onDeleteField }: {
+function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onReorderFields, onAddSection, onDuplicateContent, onDuplicateSection, onApplyToAllForms, onDuplicateField, onDeleteField }: {
   form: StudyForm;
   filter: 'all' | ReviewStatus;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
@@ -971,6 +999,7 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
   onDuplicateForm: () => void;
   onReorderFields: (formId: string, next: StudyField[]) => void;
   onAddSection: (formId: string) => void;
+  onDuplicateContent: (formId: string) => void;
   onDuplicateSection: (formId: string, section: string | null) => void;
   onApplyToAllForms: (formId: string, section: string | null) => void;
   onDuplicateField: (formId: string, fieldId: string) => void;
@@ -997,6 +1026,7 @@ function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, o
             activeBg="#fee2e2" activeFg="#b91c1c"
             onClick={() => onFormReview(form.id, 'rejected')}><X size={13} /> Reject all</SmallBtn>
           <SmallBtn active={false} onClick={() => onAddSection(form.id)}><Plus size={13} /> Add section</SmallBtn>
+          <SmallBtn active={false} onClick={() => onDuplicateContent(form.id)}><CopyPlus size={13} /> Copy content</SmallBtn>
           <button className="lift" title="Customize prompt / regenerate" onClick={() => setShowPrompt(s => !s)} style={visitCtlBtn}>
             <RefreshCw size={13} color={showPrompt ? '#2563eb' : '#64748b'} />
           </button>
