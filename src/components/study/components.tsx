@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, Check, ChevronDown, ClipboardCheck, Copy, CopyPlus, Folder, FolderTree,
-  GripVertical, PenLine, Pencil, Plus, RefreshCw, SlidersHorizontal, Split, Trash2, Upload, X,
+  GripVertical, PenLine, Pencil, Plus, RefreshCw, Rows3, SlidersHorizontal, Split, Trash2, Upload, X,
 } from 'lucide-react';
 import type { ReviewStatus, StudyField, StudyForm, StudyVisit } from '../../types/study';
 import { arrayMove } from '@dnd-kit/sortable';
@@ -67,6 +67,8 @@ export function FormBlock({ form, filter, onField, onRule, onFormReview, onEditF
             onClick={() => onFormReview(form.id, 'rejected')}><X size={13} /> Reject all</SmallBtn>
           <SmallBtn active={false} onClick={() => onAddSection(form.id)}><Plus size={13} /> Add section</SmallBtn>
           <SmallBtn active={false} onClick={() => onDuplicateContent(form.id)}><CopyPlus size={13} /> Copy content</SmallBtn>
+          <SmallBtn active={!!form.repeatable} activeBg="#eef2ff" activeFg="#4338ca"
+            onClick={() => onUpdateForm(form.id, { repeatable: !form.repeatable })}><Rows3 size={13} /> Repeatable</SmallBtn>
           <button className="lift" title="Customize prompt / regenerate" onClick={() => setShowPrompt(s => !s)} style={visitCtlBtn}>
             <RefreshCw size={13} color={showPrompt ? '#2563eb' : '#64748b'} />
           </button>
@@ -129,6 +131,14 @@ export function FormBlock({ form, filter, onField, onRule, onFormReview, onEditF
       )}
 
       <div>
+        {form.repeatable && (
+          <div style={{
+            padding: '8px 18px', background: '#eef2ff', borderBottom: '1px solid #e0e7ff',
+            display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#4338ca', fontWeight: 600,
+          }}>
+            <Rows3 size={13} /> Repeatable form — the fields below define one record (Record 1); the site adds more records at data entry.
+          </div>
+        )}
         {hiddenCount > 0 && (
           <p style={{ padding: '8px 18px', fontSize: 12, color: '#94a3b8', background: '#fafbfc', borderBottom: '1px solid #f1f5f9' }}>
             {hiddenCount} field{hiddenCount !== 1 ? 's' : ''} hidden by the “{filter === 'accepted' ? 'Approved' : filter === 'pending' ? 'Pending' : 'Rejected'}” filter.
@@ -224,6 +234,17 @@ export function FormBlock({ form, filter, onField, onRule, onFormReview, onEditF
             </SortableList>
           );
         })()}
+        {form.repeatable && (
+          <div style={{ padding: '10px 18px', borderTop: '1px dashed #e0e7ff', background: '#f5f7ff', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 8,
+              border: '1px dashed #c7d2fe', color: '#6366f1', fontSize: 12.5, fontWeight: 600,
+            }}>
+              <Plus size={14} /> Add entry
+            </span>
+            <span style={{ fontSize: 11.5, color: '#94a3b8' }}>Records are added by site staff at data entry.</span>
+          </div>
+        )}
       </div>
 
       {/* Add field */}

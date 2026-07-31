@@ -81,7 +81,7 @@ export const DEMO_STUDY: StudyModel = {
       id: 'log1', name: 'Adverse Event Log', kind: 'log', arm: 'General',
       forms: [
         {
-          id: 'log1f1', name: 'Adverse Events', appliedTemplate: 'Adverse Event Log',
+          id: 'log1f1', name: 'Adverse Events', appliedTemplate: 'Adverse Event Log', repeatable: true,
           fields: [
             { id: 'f11', label: 'AE Term', type: 'text', required: true, section: 'Event Details', confidence: 'high', completionGuidance: 'Record the diagnosis (preferred) or symptom using standard terminology — not individual symptoms where a diagnosis exists.', source: 'Protocol §8.1', reviewStatus: 'pending' },
             { id: 'f11b', label: 'Start Date', type: 'date', required: true, section: 'Event Details', confidence: 'high', completionGuidance: 'Date of first onset of the event.', source: 'Protocol §8.1', reviewStatus: 'pending' },

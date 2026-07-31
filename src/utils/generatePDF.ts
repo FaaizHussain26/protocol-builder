@@ -130,6 +130,15 @@ export function generateCompletionGuidelinesPDF(study: StudyModel): void {
       doc.text(`${visit.name}  ›  ${form.name}`, mL + 3, y + 6);
       y += 13;
 
+      if (form.repeatable) {
+        br(6);
+        doc.setTextColor(99, 102, 241);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.text('Repeatable form - complete these fields for each record.', mL + 3, y);
+        y += 6;
+      }
+
       for (const f of fields) {
         br(16);
         doc.setTextColor(30, 41, 59);
@@ -234,11 +243,48 @@ function drawField(doc: jsPDF, f: import('../types/study').StudyField, x: number
   return cy + 4;
 }
 
+// Draws a repeatable form as a table: one column per field, a header row of
+// labels, and three blank rows to signal the site adds one row per record.
+// Returns the new y.
+function drawRepeatableTable(
+  doc: jsPDF, fields: import('../types/study').StudyField[], x: number, y: number, w: number,
+  br: (need: number) => number,
+): number {
+  const n = fields.length;
+  if (!n) return y;
+  const colW = w / n;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  const headerLines = fields.map(f => doc.splitTextToSize(`${f.label}${f.required ? ' *' : ''}`, colW - 2));
+  const headerH = Math.max(6, Math.max(...headerLines.map(l => l.length)) * 3.1 + 3);
+  const rowH = 7;
+  y = br(headerH + rowH * 3 + 4);
+
+  doc.setDrawColor(203, 213, 225);
+  doc.setFillColor(238, 242, 255);
+  doc.rect(x, y, w, headerH, 'F');
+  doc.setTextColor(55, 48, 163);
+  let cx = x;
+  for (let i = 0; i < n; i++) {
+    doc.rect(cx, y, colW, headerH);
+    doc.text(headerLines[i], cx + 1.2, y + 3.4);
+    cx += colW;
+  }
+  let cy = y + headerH;
+  doc.setTextColor(148, 163, 184);
+  for (let r = 0; r < 3; r++) {
+    cx = x;
+    for (let i = 0; i < n; i++) { doc.rect(cx, cy, colW, rowH); cx += colW; }
+    cy += rowH;
+  }
+  return cy + 2;
+}
+
 // ---------- 2. CTMS-ready Build Specification PDF ----------
 export function generateBuildSpecPDF(study: StudyModel, stats: DocStats): void {
   const { doc, pageW, pageH, mL, mR, contentW } = setup(study, 'eSource Build Specification');
   let y = 42;
-  const br = (need: number) => { if (y + need > pageH - 18) { doc.addPage(); y = 20; } };
+  const br = (need: number) => { if (y + need > pageH - 18) { doc.addPage(); y = 20; } return y; };
 
   // Study details
   doc.setTextColor(100, 116, 139);
@@ -299,21 +345,31 @@ export function generateBuildSpecPDF(study: StudyModel, stats: DocStats): void {
       doc.setTextColor(37, 99, 235);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9.5);
-      doc.text(`${form.name}${form.appliedTemplate ? `  (template: ${form.appliedTemplate})` : ''}`, mL + 4, y);
+      doc.text(`${form.name}${form.repeatable ? '  [repeatable]' : ''}${form.appliedTemplate ? `  (template: ${form.appliedTemplate})` : ''}`, mL + 4, y);
       y += 5;
 
-      for (const f of fields) {
-        const ft = (f.type as string) === 'dropdown' ? 'select' : f.type;
-        const isChoice = ft === 'select' || ft === 'radio' || ft === 'yesno' || ft === 'multiselect' || ft === 'checkbox';
-        // select adds an N/A row (see drawField); yes/no is fixed at 2.
-        const optCount = ft === 'yesno' ? 2 : ft === 'select' ? (f.options?.length ?? 0) + 1 : (f.options?.length || 1);
-        const ctrlH = ft === 'textarea' ? 16
-          : ft === 'signature' ? 14
-          : ft === 'file' ? 12
-          : isChoice ? optCount * 5.8 + 2
-          : 10;
-        br(14 + ctrlH);
-        y = drawField(doc, f, mL + 7, y, contentW - 12);
+      if (form.repeatable) {
+        doc.setTextColor(99, 102, 241);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        br(6);
+        doc.text('Repeatable - the site adds one row per record (Row 1 shown):', mL + 7, y);
+        y += 4;
+        y = drawRepeatableTable(doc, fields, mL + 7, y, contentW - 12, br);
+      } else {
+        for (const f of fields) {
+          const ft = (f.type as string) === 'dropdown' ? 'select' : f.type;
+          const isChoice = ft === 'select' || ft === 'radio' || ft === 'yesno' || ft === 'multiselect' || ft === 'checkbox';
+          // select adds an N/A row (see drawField); yes/no is fixed at 2.
+          const optCount = ft === 'yesno' ? 2 : ft === 'select' ? (f.options?.length ?? 0) + 1 : (f.options?.length || 1);
+          const ctrlH = ft === 'textarea' ? 16
+            : ft === 'signature' ? 14
+            : ft === 'file' ? 12
+            : isChoice ? optCount * 5.8 + 2
+            : 10;
+          br(14 + ctrlH);
+          y = drawField(doc, f, mL + 7, y, contentW - 12);
+        }
       }
       // accepted rules
       const rules = form.rules.filter(r => r.accepted === true);
