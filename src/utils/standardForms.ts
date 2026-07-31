@@ -6,6 +6,7 @@ export const SCREENING_FORM_NAMES = [
   'Demographics',
   'Inclusion/Exclusion Criteria',
   'Eligibility',
+  'Physical Measurements',
   'Vital Signs',
   'Physical Examination',
   'ECG',
@@ -14,7 +15,7 @@ export const SCREENING_FORM_NAMES = [
   'Completion',
 ];
 
-export const GENERAL_FORM_NAMES = ['Medical History', 'Allergies', 'Social History', 'Adverse Events', 'Serious Adverse Events'];
+export const GENERAL_FORM_NAMES = ['Medical History', 'Allergies', 'Social History', 'Adverse Events', 'Serious Adverse Events', 'Study Drug Administration'];
 
 export const ALL_STANDARD_NAMES = [...SCREENING_FORM_NAMES, ...GENERAL_FORM_NAMES];
 
