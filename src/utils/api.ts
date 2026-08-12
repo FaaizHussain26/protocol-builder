@@ -76,18 +76,8 @@ const BUILD_POLL_MS = 3000;
 const BUILD_MAX_WAIT_MS = 20 * 60 * 1000; // give up after 20 minutes
 const BUILD_MAX_POLL_FAILS = 6; // tolerate transient status-poll failures
 
-export async function buildStudyFromDocuments(
-  protocolText: string,
-  documents: IngestedDocument[],
-  options: BuildOptions = {},
-  templatePreferences?: TemplatePreferences,
-  onProgress?: (p: BuildProgress) => void,
-): Promise<StudyModel> {
-  const { jobId } = await req<{ jobId: string }>('/api/build', {
-    method: 'POST',
-    body: JSON.stringify({ protocolText, documents, options, templatePreferences }),
-  });
-
+// Poll a study-producing job (build or review) to completion, streaming progress.
+async function pollStudyJob(jobId: string, label: string, onProgress?: (p: BuildProgress) => void): Promise<StudyModel> {
   const start = Date.now();
   let fails = 0;
   for (;;) {
@@ -97,15 +87,48 @@ export async function buildStudyFromDocuments(
       s = await req<BuildStatus>(`/api/build/status/${jobId}`, {}, 0);
       fails = 0;
     } catch (e) {
-      // A transient blip on a status poll shouldn't abandon a build in progress.
+      // A transient blip on a status poll shouldn't abandon a job in progress.
       if (++fails >= BUILD_MAX_POLL_FAILS) throw e;
       continue;
     }
     onProgress?.({ phase: s.phase, progress: s.progress, partial: s.partial });
     if (s.status === 'done' && s.study) return s.study;
-    if (s.status === 'error') throw new Error(s.error || 'Build failed on the server.');
-    if (Date.now() - start > BUILD_MAX_WAIT_MS) throw new Error('Build timed out. Please try again.');
+    if (s.status === 'error') throw new Error(s.error || `${label} failed on the server.`);
+    if (Date.now() - start > BUILD_MAX_WAIT_MS) throw new Error(`${label} timed out. Please try again.`);
   }
+}
+
+export async function buildStudyFromDocuments(
+  protocolText: string,
+  documents: IngestedDocument[],
+  options: BuildOptions = {},
+  templatePreferences?: TemplatePreferences,
+  onProgress?: (p: BuildProgress) => void,
+  /** Receives the build job id — hand it to reviewStudyForms so the follow-up
+   *  testing pass can reuse the study + corpus the server already holds. */
+  onJobId?: (id: string) => void,
+): Promise<StudyModel> {
+  const { jobId } = await req<{ jobId: string }>('/api/build', {
+    method: 'POST',
+    body: JSON.stringify({ protocolText, documents, options, templatePreferences }),
+  });
+  onJobId?.(jobId);
+  return pollStudyJob(jobId, 'Build', onProgress);
+}
+
+// Second pass: the AI re-checks every generated form against the eCRF/Protocol and
+// repairs what the build missed. Normally carries just the completed build's job id
+// (the server still holds its study + corpus); pass study/protocolText only when
+// that job may have expired.
+export async function reviewStudyForms(
+  args: { buildJobId?: string; study?: StudyModel; protocolText?: string },
+  onProgress?: (p: BuildProgress) => void,
+): Promise<StudyModel> {
+  const { jobId } = await req<{ jobId: string }>('/api/build/review', {
+    method: 'POST',
+    body: JSON.stringify(args),
+  });
+  return pollStudyJob(jobId, 'Form testing', onProgress);
 }
 
 export interface RegenerateFormArgs {

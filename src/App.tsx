@@ -13,7 +13,7 @@ import Sidebar, { SIDEBAR_WIDTH, type AppView } from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import PassLock, { isUnlocked, lockApp } from './components/PassLock';
 import { extractTextFromFiles } from './utils/extractText';
-import { buildStudyFromDocuments, listTemplates } from './utils/api';
+import { buildStudyFromDocuments, reviewStudyForms, listTemplates } from './utils/api';
 import type { BuildOptions, BuildTreeRow } from './utils/api';
 import type { StudyModel, IngestedDocument, Template } from './types/study';
 import { DEMO_STUDY } from './utils/demoStudy';
@@ -113,14 +113,33 @@ export default function App() {
       const prefs = templates.find(t => t.id === options.templateId)?.preferences;
       // Live progress streams from the server: real phase, percent, and the
       // arm → folder → form tree filling in as each form is built.
+      let buildJobId: string | undefined;
       const built = await buildStudyFromDocuments(text, documents, options, prefs, (p) => {
         if (p.phase) setStageMsg(p.phase);
-        if (typeof p.progress === 'number') setProgress(50 + Math.round(p.progress * 0.48));
+        if (typeof p.progress === 'number') setProgress(50 + Math.round(p.progress * 0.38));
         if (p.partial) setBuildTree(p.partial);
-      });
+      }, (id) => { buildJobId = id; });
+
+      // Second pass: the AI re-checks each generated form against the eCRF/Protocol
+      // and repairs what the build missed. Best-effort — if it fails, the user still
+      // gets the build.
+      setStageMsg('AI is testing the forms…');
+      setProgress(88);
+      let finalStudy = built;
+      try {
+        finalStudy = await reviewStudyForms(
+          { buildJobId, study: buildJobId ? undefined : built, protocolText: buildJobId ? undefined : text },
+          (p) => {
+            if (p.phase) setStageMsg(`AI is testing the forms — ${p.phase.toLowerCase()}`);
+            if (typeof p.progress === 'number') setProgress(88 + Math.round(p.progress * 0.11));
+          },
+        );
+      } catch {
+        /* QA pass is optional — fall through with the built study */
+      }
       setProgress(99);
 
-      setStudy(built);
+      setStudy(finalStudy);
       setCurrentStudyId(undefined); // a fresh, unsaved build
       setStudyTab('build');
       setStep('build');
