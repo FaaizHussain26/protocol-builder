@@ -9,6 +9,10 @@ interface StudyLibraryProps {
   mode: 'final' | 'drafts' | 'trash';
 }
 
+// Short absolute date for the created/updated stamps, e.g. "24 Aug 2026".
+const fmtDate = (iso?: string) =>
+  iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
 // Page listing saved studies (single shared workspace): open, trash, restore.
 // "My E-Sources" holds fully-approved builds; drafts are in review; trash is
 // soft-deleted studies that can be restored or permanently removed.
@@ -127,7 +131,7 @@ export default function StudyLibrary({ onOpen, mode }: StudyLibraryProps) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.studyTitle}</p>
                   <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
-                    {[s.protocolNumber, s.phase, `${s.visitCount} visits`, `${s.fieldCount} fields`].filter(Boolean).join(' · ')}
+                    {[s.protocolNumber, s.phase, `${s.visitCount} visits`, `${s.fieldCount} fields`, s.createdAt && `Created ${fmtDate(s.createdAt)}`].filter(Boolean).join(' · ')}
                   </p>
                   {mode === 'drafts' && s.fieldCount > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>

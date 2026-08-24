@@ -328,6 +328,8 @@ export interface StudySummary {
   protocolNumber?: string;
   phase?: string;
   status: string;
+  /** When the eSource was first created (ISO). */
+  createdAt?: string;
   updatedAt: string;
   visitCount: number;
   fieldCount: number;
