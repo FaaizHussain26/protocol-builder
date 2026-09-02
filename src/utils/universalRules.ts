@@ -1,11 +1,10 @@
 import type { TemplateQuestion } from '../types/study';
 
-// Universal eSource rules ("Universal Rules across all the sites"), surfaced in
-// the preferences template as selectable Yes/No questions. MUST stay in sync
+// Universal eSource rules ("Universal Rules across all the sites"). MUST stay in sync
 // with the server source of truth at
 // protocol-builder-server/src/services/pipeline/universalRules.ts — ids are
 // generated as `u-<prefix>-<n>` so both sides agree (the server injects these
-// per form; here they drive the UI and any "No" overrides).
+// per form; unselected rules fall back to default "yes").
 
 interface RuleGroupSeed {
   group: string;
@@ -341,5 +340,5 @@ export const UNIVERSAL_QUESTIONS: TemplateQuestion[] = GROUPS.flatMap((g) =>
   })),
 );
 
-// Group labels in display order (used by the New Build wizard Universal Rules step).
+// Group labels in display order.
 export const UNIVERSAL_GROUPS: string[] = GROUPS.map((g) => g.group);

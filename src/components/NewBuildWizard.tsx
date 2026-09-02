@@ -1,15 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
-  AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, FileOutput, FileText,
-  Layers, Plus, Sparkles, Trash2,
+  AlertCircle, AlertTriangle, CheckCircle2, FileOutput, FileText,
+  Layers, Sparkles,
 } from 'lucide-react';
 import DocumentUploadBox from './DocumentUploadBox';
-import { listQuestions, createQuestion, deleteQuestion } from '../utils/api';
 import { renderDateSample } from '../utils/formatPrefs';
-import { UNIVERSAL_QUESTIONS, UNIVERSAL_GROUPS } from '../utils/universalRules';
-import type { QuestionAnswerType, TemplatePreferences, TemplateQuestion } from '../types/study';
+import type { TemplatePreferences } from '../types/study';
 
-export type WizardStep = 1 | 2 | 3;
+export type WizardStep = 1 | 2;
 
 interface NewBuildWizardProps {
   prefs: TemplatePreferences;
@@ -28,8 +26,7 @@ type DetailLevel = (typeof DETAIL_LEVELS)[number];
 
 const STEPS: { n: WizardStep; label: string }[] = [
   { n: 1, label: 'Plan Mode' },
-  { n: 2, label: 'Universal Rules' },
-  { n: 3, label: 'Documents' },
+  { n: 2, label: 'Documents' },
 ];
 
 export default function NewBuildWizard({
@@ -39,72 +36,9 @@ export default function NewBuildWizard({
   onBuild, error,
 }: NewBuildWizardProps) {
   const [wizardStep, setWizardStep] = useState<WizardStep>(1);
-  const [customQuestions, setCustomQuestions] = useState<TemplateQuestion[]>([]);
-  const [newQText, setNewQText] = useState('');
-  const [newQType, setNewQType] = useState<QuestionAnswerType>('yesno');
-  const [addingQ, setAddingQ] = useState(false);
-  const [qError, setQError] = useState<string | null>(null);
-  // Universal Rules is long (~224) — groups start collapsed.
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    listQuestions().then(setCustomQuestions).catch(() => {});
-  }, []);
 
   const setPref = <K extends keyof TemplatePreferences>(key: K, value: TemplatePreferences[K]) =>
     onPrefsChange({ ...prefs, [key]: value });
-
-  const selectedQuestions = prefs.questions ?? [];
-  const isSelected = (id: string) => selectedQuestions.some((q) => q.id === id);
-
-  const toggleQuestion = (q: TemplateQuestion) => {
-    const cur = prefs.questions ?? [];
-    const next = cur.some((x) => x.id === q.id) ? cur.filter((x) => x.id !== q.id) : [...cur, { ...q }];
-    setPref('questions', next);
-  };
-
-  const answerOf = (q: TemplateQuestion): 'yes' | 'no' =>
-    selectedQuestions.find((x) => x.id === q.id)?.answer ?? q.answer ?? 'yes';
-
-  const setQuestionAnswer = (q: TemplateQuestion, answer: 'yes' | 'no') => {
-    const cur = prefs.questions ?? [];
-    const next = cur.some((x) => x.id === q.id)
-      ? cur.map((x) => (x.id === q.id ? { ...x, answer } : x))
-      : [...cur, { ...q, answer }];
-    setPref('questions', next);
-  };
-
-  const setGroupSelected = (list: TemplateQuestion[], on: boolean) => {
-    const ids = new Set(list.map((q) => q.id));
-    const cur = (prefs.questions ?? []).filter((x) => !ids.has(x.id));
-    setPref('questions', on ? [...cur, ...list.map((q) => ({ ...q }))] : cur);
-  };
-
-  const addCustomQuestion = async () => {
-    if (!newQText.trim()) return;
-    setAddingQ(true);
-    setQError(null);
-    try {
-      const q = await createQuestion({ text: newQText.trim(), answerType: newQType });
-      setCustomQuestions((prev) => [q, ...prev]);
-      toggleQuestion(q);
-      setNewQText('');
-    } catch (e) {
-      setQError(e instanceof Error ? e.message : 'Failed to add question');
-    } finally {
-      setAddingQ(false);
-    }
-  };
-
-  const removeCustomQuestion = async (id: string) => {
-    try {
-      await deleteQuestion(id);
-      setCustomQuestions((prev) => prev.filter((q) => q.id !== id));
-      setPref('questions', (prefs.questions ?? []).filter((q) => q.id !== id));
-    } catch (e) {
-      setQError(e instanceof Error ? e.message : 'Failed to delete question');
-    }
-  };
 
   const toggle = (key: keyof TemplatePreferences, label: string, hint: string) => (
     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', padding: '7px 0' }}>
@@ -120,11 +54,6 @@ export default function NewBuildWizard({
   // unless the user clears a required value (currently just date format).
   const step1Ready = !!(prefs.dateFormat?.trim()) && (prefs.timeFormat === '12h' || prefs.timeFormat === '24h');
   const canGoTo = (n: WizardStep) => n <= wizardStep || (n > 1 && step1Ready);
-
-  const questionGroups: { name: string; list: TemplateQuestion[] }[] = [
-    ...UNIVERSAL_GROUPS.map((name) => ({ name, list: UNIVERSAL_QUESTIONS.filter((q) => q.group === name) })),
-    { name: 'Custom', list: customQuestions },
-  ];
 
   const allFiles = [...protocolFiles, ...ecrfFiles];
 
@@ -243,25 +172,6 @@ export default function NewBuildWizard({
               {toggle('generalSections', 'General Sections', 'Add Medical History, Allergies, Social History, Adverse Events, Serious Adverse Events.')}
             </div>
 
-            {/* Question 3 pending Image 2 — do not invent a question. */}
-            <div
-              aria-label="Question 3 pending (Image 2)"
-              style={{
-                margin: '4px 0',
-                padding: '16px 18px',
-                border: '2px dashed #f59e0b',
-                borderRadius: 12,
-                background: '#fffbeb',
-              }}
-            >
-              <p style={{ fontSize: 11.5, fontWeight: 800, color: '#b45309', letterSpacing: 0.4, textTransform: 'uppercase' }}>
-                Question 3 pending (Image 2)
-              </p>
-              <p style={{ fontSize: 12.5, color: '#92400e', marginTop: 6, lineHeight: 1.5 }}>
-                This Plan Mode question will be filled in once the screenshot arrives. Do not skip this slot.
-              </p>
-            </div>
-
             <YesNoDetail
               label="Field descriptions"
               hint="Write completion guidance on each field."
@@ -303,111 +213,6 @@ export default function NewBuildWizard({
       )}
 
       {wizardStep === 2 && (
-        <div style={card}>
-          <div style={{ padding: '20px 26px 22px' }}>
-            <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Universal Rules</p>
-            <p style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0 14px', lineHeight: 1.5 }}>
-              Select questions/rules to feed into the build prompt and set each Yes/No answer. The Universal Rules apply by default;
-              set one to <b>No</b> to disable it for this build. Custom questions you add are saved and reappear next time.
-              Groups start collapsed.
-            </p>
-            {qError && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 10, background: '#fef2f2', border: '1px solid #fecaca', marginBottom: 12 }}>
-                <AlertCircle size={15} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
-                <p style={{ color: '#dc2626', fontSize: 13 }}>{qError}</p>
-              </div>
-            )}
-            {questionGroups.map((grp) => {
-              const selectedCount = grp.list.filter((q) => isSelected(q.id)).length;
-              const open = openGroups.has(grp.name);
-              return (
-                <div key={grp.name} style={{ marginBottom: 10, border: '1px solid #eef2f7', borderRadius: 12, overflow: 'hidden' }}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenGroups((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(grp.name)) next.delete(grp.name); else next.add(grp.name);
-                      return next;
-                    })}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '10px 12px', border: 'none', background: '#fafbff', cursor: 'pointer', textAlign: 'left',
-                    }}
-                  >
-                    {open ? <ChevronDown size={14} color="#64748b" /> : <ChevronRight size={14} color="#64748b" />}
-                    <p style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', letterSpacing: 0.3, textTransform: 'uppercase' }}>{grp.name}</p>
-                    {grp.list.length > 0 && (
-                      <span style={{ fontSize: 10.5, color: '#94a3b8' }}>{selectedCount}/{grp.list.length}</span>
-                    )}
-                    {grp.name !== 'Custom' && grp.list.length > 0 && (
-                      <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
-                        <button type="button" onClick={() => setGroupSelected(grp.list, true)} style={miniBtn}>Select all</button>
-                        <button type="button" onClick={() => setGroupSelected(grp.list, false)} style={miniBtn}>Clear</button>
-                      </div>
-                    )}
-                  </button>
-                  {open && (
-                    <div style={{ padding: '8px 10px 10px' }}>
-                      {grp.name === 'Custom' && grp.list.length === 0 && (
-                        <p style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', marginBottom: 6 }}>No custom questions yet — add one below.</p>
-                      )}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 4 }}>
-                        {grp.list.map((q) => (
-                          <label key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 8, cursor: 'pointer', background: isSelected(q.id) ? '#eff6ff' : 'transparent', border: `1px solid ${isSelected(q.id) ? '#bfdbfe' : 'transparent'}` }}>
-                            <input type="checkbox" checked={isSelected(q.id)} onChange={() => toggleQuestion(q)} style={{ accentColor: '#2563eb' }} />
-                            <span style={{ flex: 1, fontSize: 13, color: '#1e293b' }}>{q.text}</span>
-                            {q.answerType === 'yesno' ? (
-                              <span style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                                {(['yes', 'no'] as const).map((val) => {
-                                  const active = answerOf(q) === val && isSelected(q.id);
-                                  return (
-                                    <span key={val} role="button" onClick={(e) => { e.preventDefault(); setQuestionAnswer(q, val); }} style={{
-                                      padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                                      background: active ? (val === 'yes' ? '#16a34a' : '#dc2626') : '#fff',
-                                      color: active ? '#fff' : '#94a3b8',
-                                    }}>{val === 'yes' ? 'Yes' : 'No'}</span>
-                                  );
-                                })}
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '2px 7px', borderRadius: 10, whiteSpace: 'nowrap' }}>{answerTypeLabel(q)}</span>
-                            )}
-                            {q.custom && (
-                              <span role="button" onClick={(e) => { e.preventDefault(); if (q.id) removeCustomQuestion(q.id); }} style={{ color: '#cbd5e1', cursor: 'pointer', display: 'inline-flex' }} aria-label="Delete question"><Trash2 size={13} /></span>
-                            )}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <input
-                value={newQText}
-                onChange={(e) => setNewQText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomQuestion(); } }}
-                placeholder="Add a custom question…"
-                style={{ ...inputStyle, flex: 1 }}
-              />
-              <select value={newQType} onChange={(e) => setNewQType(e.target.value as QuestionAnswerType)} style={{ ...inputStyle, width: 'auto' }}>
-                {ANSWER_TYPES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
-              </select>
-              <button className="lift" type="button" onClick={addCustomQuestion} disabled={addingQ || !newQText.trim()} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 14px', borderRadius: 9, border: 'none',
-                background: addingQ || !newQText.trim() ? '#cbd5e1' : '#2563eb', color: '#fff', fontSize: 13, fontWeight: 600,
-                cursor: addingQ || !newQText.trim() ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
-              }}>
-                <Plus size={14} /> Add
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {wizardStep === 3 && (
         <div style={card}>
           <div style={{ height: 4, background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 35%, #f26a1b 100%)' }} />
           <div style={{ padding: '20px 26px 22px' }}>
@@ -467,13 +272,13 @@ export default function NewBuildWizard({
         >
           Back
         </button>
-        {wizardStep < 3 && (
+        {wizardStep < 2 && (
           <button
             type="button"
             disabled={wizardStep === 1 && !step1Ready}
             onClick={() => {
               if (wizardStep === 1 && !step1Ready) return;
-              setWizardStep((s) => (s === 3 ? s : ((s + 1) as WizardStep)));
+              setWizardStep((s) => (s === 2 ? s : ((s + 1) as WizardStep)));
             }}
             style={{
               marginLeft: 'auto', padding: '10px 22px', borderRadius: 11, border: 'none',
@@ -514,19 +319,6 @@ const card: React.CSSProperties = {
   boxShadow: '0 18px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.06)', overflow: 'hidden',
 };
 const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', borderRadius: 9, border: '1.5px solid #cbd5e1', fontSize: 13.5, color: '#1e293b', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' };
-const miniBtn: React.CSSProperties = { padding: '2px 8px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 10.5, fontWeight: 600, cursor: 'pointer' };
-
-const ANSWER_TYPES: { value: QuestionAnswerType; label: string }[] = [
-  { value: 'yesno', label: 'Yes/No' },
-  { value: 'date', label: 'Date' },
-  { value: 'time', label: 'Time' },
-  { value: 'dropdown', label: 'Dropdown' },
-  { value: 'text', label: 'Text' },
-  { value: 'textarea', label: 'Multi-line' },
-  { value: 'number', label: 'Number' },
-  { value: 'preference', label: 'Preference' },
-];
-const answerTypeLabel = (q: TemplateQuestion): string => ANSWER_TYPES.find((a) => a.value === q.answerType)?.label ?? q.answerType;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

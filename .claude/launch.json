@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "protocol-form-builder",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "/Users/Armaash-hussain/.nvm/versions/node/v20.19.4/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5173", "--strictPort"],
       "port": 5173
     }
   ]
