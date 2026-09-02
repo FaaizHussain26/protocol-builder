@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import {
-  Loader, CheckCircle2, FileText,
-} from 'lucide-react';
 import NewBuildWizard from './components/NewBuildWizard';
 import StudyBuilder, { type Tab as StudyTab } from './components/StudyBuilder';
 import StudyLibrary from './components/StudyLibrary';
@@ -67,7 +64,6 @@ export default function App() {
   const [corpusText, setCorpusText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [ingestIndex, setIngestIndex] = useState(0);
   const [stageMsg, setStageMsg] = useState('');
   // Live build tree streamed from the server (arm → folder → forms).
   const [buildTree, setBuildTree] = useState<BuildTreeRow[]>([]);
@@ -94,13 +90,11 @@ export default function App() {
       const documents: IngestedDocument[] = [];
       setStageMsg('Ingesting source documents...');
       for (let i = 0; i < allFiles.length; i++) {
-        setIngestIndex(i);
         const f = allFiles[i];
         documents.push({ name: f.name, docType: docTypeOf(f), sizeBytes: f.size });
         setProgress(8 + Math.round(((i + 1) / allFiles.length) * 32));
         await new Promise(r => setTimeout(r, 280));
       }
-      setIngestIndex(allFiles.length);
 
       setStageMsg('Reading document contents...');
       const text = await extractTextFromFiles(allFiles);
@@ -147,7 +141,6 @@ export default function App() {
       setStep('upload');
     } finally {
       setProgress(0);
-      setIngestIndex(0);
     }
   };
 
@@ -219,7 +212,7 @@ export default function App() {
         {view === 'drafts' && <StudyLibrary mode="drafts" onOpen={handleOpenSaved} />}
         {view === 'trash' && <StudyLibrary mode="trash" onOpen={handleOpenSaved} />}
 
-        {view === 'builder' && step === 'upload' && (
+        {view === 'builder' && (step === 'upload' || step === 'processing') && (
           <NewBuildWizard
             key={wizardKey}
             prefs={prefs}
@@ -230,88 +223,11 @@ export default function App() {
             onEcrfFilesChange={setEcrfFiles}
             onBuild={handleBuild}
             error={error}
+            building={step === 'processing'}
+            stageMsg={stageMsg}
+            progress={progress}
+            buildTree={buildTree}
           />
-        )}
-
-        {view === 'builder' && step === 'processing' && (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', minHeight: 480, textAlign: 'center',
-          }}>
-            <div style={{
-              width: 80, height: 80, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #dbeafe, #eff6ff)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24,
-            }}>
-              <Loader size={36} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
-            </div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>Building Your Study</h2>
-            <p style={{ fontSize: 15, color: '#64748b', marginBottom: 28 }}>{stageMsg}</p>
-
-            {/* Ingestion checklist */}
-            <div style={{ width: 380, maxWidth: '100%', marginBottom: 24 }}>
-              {allFiles.map((f, i) => {
-                const done = i < ingestIndex;
-                const active = i === ingestIndex;
-                return (
-                  <div key={`${f.name}-${i}`} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                    borderRadius: 9, marginBottom: 6,
-                    background: done ? '#f0fdf4' : active ? '#eff6ff' : '#f8fafc',
-                    border: `1px solid ${done ? '#bbf7d0' : active ? '#bfdbfe' : '#e2e8f0'}`,
-                  }}>
-                    {done
-                      ? <CheckCircle2 size={15} color="#16a34a" />
-                      : active
-                        ? <Loader size={15} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
-                        : <FileText size={15} color="#94a3b8" />}
-                    <span style={{ flex: 1, textAlign: 'left', fontSize: 13, fontWeight: 500, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {f.name}
-                    </span>
-                    <span style={{ fontSize: 11, color: '#94a3b8' }}>{docTypeOf(f)}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div style={{ width: 320, background: '#e2e8f0', borderRadius: 8, height: 8, marginBottom: 12 }}>
-              <div style={{
-                height: '100%', borderRadius: 8, background: 'linear-gradient(90deg, #2563eb, #7c3aed)',
-                width: `${progress}%`, transition: 'width 0.5s ease',
-              }} />
-            </div>
-            <p style={{ fontSize: 13, color: '#94a3b8' }}>{progress}% complete</p>
-
-            {/* Live build tree — arms → folders → forms filling in as the AI works */}
-            {buildTree.length > 0 && (() => {
-              const arms = Array.from(new Set(buildTree.map(r => r.arm)));
-              return (
-                <div style={{ width: 480, maxWidth: '100%', marginTop: 24, textAlign: 'left', maxHeight: 300, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', padding: '12px 14px' }}>
-                  {arms.map(arm => (
-                    <div key={arm} style={{ marginBottom: 10 }}>
-                      <p style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>{arm}</p>
-                      {buildTree.filter(r => r.arm === arm).map((r, i) => (
-                        <div key={`${r.folder}-${i}`} style={{ paddingLeft: 8, marginBottom: 3 }}>
-                          <p style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>{r.folder}</p>
-                          <div style={{ paddingLeft: 10, display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
-                            {r.forms.map((f, j) => (
-                              <span key={`${f.name}-${j}`} style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11,
-                                color: f.fieldCount > 0 ? '#15803d' : '#94a3b8',
-                              }}>
-                                {f.fieldCount > 0 ? <CheckCircle2 size={11} /> : <Loader size={11} style={{ animation: 'spin 1s linear infinite' }} />}
-                                {f.name}{f.fieldCount > 0 ? ` (${f.fieldCount})` : ''}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </div>
         )}
 
         {view === 'builder' && step === 'build' && study && (

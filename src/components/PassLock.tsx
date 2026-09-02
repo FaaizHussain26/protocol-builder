@@ -60,7 +60,7 @@ export default function PassLock({ onUnlock }: { onUnlock: () => void }) {
         }}>
           <Layers size={26} color="#fff" />
         </div>
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: -0.3, marginBottom: 4 }}>eSource Builder</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: -0.3, marginBottom: 4 }}>EsourcEngine</h1>
         <p style={{ fontSize: 13, color: 'rgba(226,232,240,0.65)', marginBottom: 26 }}>Enter the passcode to open the workspace.</p>
 
         <div style={{ display: 'flex', gap: 8 }}>

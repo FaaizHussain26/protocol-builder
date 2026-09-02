@@ -6,8 +6,9 @@ import {
 import DocumentUploadBox from './DocumentUploadBox';
 import { renderDateSample } from '../utils/formatPrefs';
 import type { TemplatePreferences } from '../types/study';
+import type { BuildTreeRow } from '../utils/api';
 
-export type WizardStep = 1 | 2;
+export type WizardStep = 1 | 2 | 3;
 
 interface NewBuildWizardProps {
   prefs: TemplatePreferences;
@@ -18,6 +19,12 @@ interface NewBuildWizardProps {
   onEcrfFilesChange: (files: File[]) => void;
   onBuild: () => void;
   error?: string | null;
+  /** True while the build job runs — pins the wizard on step 3. */
+  building?: boolean;
+  /** Live phase text, percent and arm→folder tree streamed from the server. */
+  stageMsg?: string;
+  progress?: number;
+  buildTree?: BuildTreeRow[];
 }
 
 const DATE_PRESETS = ['DD-MMM-YYYY', 'YYYY-MM-DD', 'MM/DD/YYYY', 'DD/MM/YYYY', 'MMM YYYY', 'MMMM D, YYYY', 'YYYY', 'YY'];
@@ -25,8 +32,9 @@ const DETAIL_LEVELS = ['high', 'medium', 'low'] as const;
 type DetailLevel = (typeof DETAIL_LEVELS)[number];
 
 const STEPS: { n: WizardStep; label: string }[] = [
-  { n: 1, label: 'Plan Mode' },
-  { n: 2, label: 'Documents' },
+  { n: 1, label: 'Plan mode' },
+  { n: 2, label: 'Upload documents' },
+  { n: 3, label: 'eSource' },
 ];
 
 export default function NewBuildWizard({
@@ -34,28 +42,39 @@ export default function NewBuildWizard({
   protocolFiles, onProtocolFilesChange,
   ecrfFiles, onEcrfFilesChange,
   onBuild, error,
+  building = false, stageMsg = '', progress = 0, buildTree = [],
 }: NewBuildWizardProps) {
   const [wizardStep, setWizardStep] = useState<WizardStep>(1);
+  // While the build runs the wizard is pinned to step 3 — the build IS step 3.
+  const step: WizardStep = building ? 3 : wizardStep;
 
   const setPref = <K extends keyof TemplatePreferences>(key: K, value: TemplatePreferences[K]) =>
     onPrefsChange({ ...prefs, [key]: value });
 
-  const toggle = (key: keyof TemplatePreferences, label: string, hint: string) => (
-    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', padding: '7px 0' }}>
-      <input type="checkbox" checked={!!prefs[key]} onChange={(e) => setPref(key, e.target.checked as never)} style={{ accentColor: '#2563eb', marginTop: 2 }} />
-      <span>
-        <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{label}</span>
-        <span style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>{hint}</span>
-      </span>
-    </label>
-  );
-
-  // Confirmation gate: every mandatory answer has a default, so Next is enabled
-  // unless the user clears a required value (currently just date format).
-  const step1Ready = !!(prefs.dateFormat?.trim()) && (prefs.timeFormat === '12h' || prefs.timeFormat === '24h');
-  const canGoTo = (n: WizardStep) => n <= wizardStep || (n > 1 && step1Ready);
+  // The five mandatory Plan Mode answers. Each ships with a default, so the counter
+  // normally reads 5 of 5 and Next simply confirms them; it only blocks if the user
+  // clears one (e.g. empties the date format).
+  const answers = [
+    !!prefs.dateFormat?.trim(),
+    prefs.timeFormat === '12h' || prefs.timeFormat === '24h',
+    typeof prefs.fieldDescriptions === 'boolean',
+    typeof prefs.fieldFootnotes === 'boolean',
+    typeof prefs.showFieldTypeBadge === 'boolean',
+  ];
+  const answered = answers.filter(Boolean).length;
+  const step1Ready = answered === answers.length;
+  // Step 3 is entered by starting the build, never by clicking the rail; while the
+  // build runs the wizard is pinned there, so nothing is navigable.
+  const canGoTo = (n: WizardStep) => !building && n !== 3 && (n <= step || step1Ready);
 
   const allFiles = [...protocolFiles, ...ecrfFiles];
+
+  // Step 3's three counters, derived from the tree the server streams as it builds.
+  const outputs = [
+    { label: 'Forms created', n: buildTree.reduce((t, r) => t + r.forms.length, 0), color: '#f26a1b' },
+    { label: 'Patient visits', n: buildTree.filter((r) => r.kind !== 'log').length, color: '#16a34a' },
+    { label: 'Fields generated', n: buildTree.reduce((t, r) => t + r.forms.reduce((x, f) => x + f.fieldCount, 0), 0), color: '#2563eb' },
+  ];
 
   return (
     <>
@@ -91,8 +110,8 @@ export default function NewBuildWizard({
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap',
       }}>
         {STEPS.map(({ n, label }, i) => {
-          const active = wizardStep === n;
-          const done = wizardStep > n;
+          const active = step === n;
+          const done = step > n;
           const allowed = canGoTo(n);
           return (
             <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -123,14 +142,22 @@ export default function NewBuildWizard({
         })}
       </div>
 
-      {wizardStep === 1 && (
+      {step === 1 && (
         <div style={card}>
           <div style={{ padding: '20px 26px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Plan Mode</p>
-              <p style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 3, lineHeight: 1.5 }}>
-                Confirm how this eSource should be built. Defaults are already set — Next confirms them.
-              </p>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Plan mode</p>
+                  <p style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 3, lineHeight: 1.5, maxWidth: 460 }}>
+                    Five answers shape how every field is written. Defaults are already set — Next confirms them.
+                  </p>
+                </div>
+                <span style={{
+                  fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                  color: step1Ready ? '#15803d' : '#94a3b8',
+                }}>{answered} of {answers.length} answered</span>
+              </div>
             </div>
 
             <Field label="Date format">
@@ -166,11 +193,6 @@ export default function NewBuildWizard({
                 ))}
               </div>
             </Field>
-
-            <div style={{ borderTop: '1px solid #eef2f7', paddingTop: 6 }}>
-              {toggle('screeningOrder', 'Chronological Screening order', 'Order Screening forms: Date of Visit → Consent → Demographics → I/E → Eligibility → Vitals → PE → ECG → Labs → Progress Notes → Completion.')}
-              {toggle('generalSections', 'General Sections', 'Add Medical History, Allergies, Social History, Adverse Events, Serious Adverse Events.')}
-            </div>
 
             <YesNoDetail
               label="Field descriptions"
@@ -212,7 +234,7 @@ export default function NewBuildWizard({
         </div>
       )}
 
-      {wizardStep === 2 && (
+      {step === 2 && (
         <div style={card}>
           <div style={{ height: 4, background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 35%, #f26a1b 100%)' }} />
           <div style={{ padding: '20px 26px 22px' }}>
@@ -258,33 +280,78 @@ export default function NewBuildWizard({
         </div>
       )}
 
+      {step === 3 && (
+        <div style={card}>
+          <div style={{ height: 4, background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 35%, #f26a1b 100%)' }} />
+          <div style={{ padding: '20px 26px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#94a3b8' }}>Building now</span>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f26a1b', animation: 'pulse 1.4s ease-in-out infinite' }} />
+            </div>
+            <p style={{ fontSize: 14.5, fontWeight: 600, color: '#1e293b', marginTop: 8 }}>{stageMsg || 'Starting the build…'}</p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginTop: 16 }}>
+              {outputs.map((o) => (
+                <div key={o.label} style={{ background: '#fff', border: '1px solid #e8edf4', borderRadius: 12, padding: 16 }}>
+                  <p style={{ fontSize: 20, fontWeight: 800, color: '#0b1220', letterSpacing: -0.4 }}>{o.n.toLocaleString()}</p>
+                  <p style={{ fontSize: 12.5, color: '#64748b', marginTop: 4 }}>{o.label}</p>
+                  <div style={{ height: 4, borderRadius: 2, background: '#eef2f7', overflow: 'hidden', marginTop: 12 }}>
+                    <div style={{ height: '100%', borderRadius: 2, background: o.color, width: `${progress}%`, transition: 'width 0.5s ease' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 12 }}>{progress}% complete</p>
+
+            {buildTree.length > 0 && (
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 320, overflowY: 'auto' }}>
+                {Array.from(new Set(buildTree.map((r) => r.arm))).map((arm) => (
+                  <div key={arm}>
+                    <p style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: '#7c3aed', marginBottom: 6 }}>{arm}</p>
+                    {buildTree.filter((r) => r.arm === arm).map((r, i) => (
+                      <div key={`${r.folder}-${i}`} style={{ padding: '7px 10px', borderRadius: 9, background: '#fafbfc', border: '1px solid #eef2f7', marginBottom: 6 }}>
+                        <p style={{ fontSize: 12.5, fontWeight: 600, color: '#334155' }}>{r.folder}</p>
+                        <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+                          {r.forms.length} form{r.forms.length !== 1 ? 's' : ''} · {r.forms.reduce((x, f) => x + f.fieldCount, 0)} fields
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Back / Next — Next is a confirmation gate (defaults fill mandatory answers). */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
         <button
           type="button"
-          disabled={wizardStep === 1}
-          onClick={() => setWizardStep((s) => (s === 1 ? s : ((s - 1) as WizardStep)))}
+          disabled={step === 1 || building}
+          onClick={() => setWizardStep((v) => (v === 1 ? v : ((v - 1) as WizardStep)))}
           style={{
             padding: '10px 18px', borderRadius: 11, border: '1px solid #e2e8f0',
-            background: '#fff', color: wizardStep === 1 ? '#cbd5e1' : '#334155',
-            fontSize: 13.5, fontWeight: 700, cursor: wizardStep === 1 ? 'not-allowed' : 'pointer',
+            background: '#fff', color: step === 1 || building ? '#cbd5e1' : '#334155',
+            fontSize: 13.5, fontWeight: 700, cursor: step === 1 || building ? 'not-allowed' : 'pointer',
           }}
         >
           Back
         </button>
-        {wizardStep < 2 && (
+        {step === 1 && (
           <button
             type="button"
-            disabled={wizardStep === 1 && !step1Ready}
+            disabled={!step1Ready}
             onClick={() => {
-              if (wizardStep === 1 && !step1Ready) return;
-              setWizardStep((s) => (s === 2 ? s : ((s + 1) as WizardStep)));
+              if (!step1Ready) return;
+              setWizardStep(2);
             }}
             style={{
               marginLeft: 'auto', padding: '10px 22px', borderRadius: 11, border: 'none',
-              background: wizardStep === 1 && !step1Ready ? '#cbd5e1' : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              background: !step1Ready ? '#cbd5e1' : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
               color: '#fff', fontSize: 13.5, fontWeight: 700,
-              cursor: wizardStep === 1 && !step1Ready ? 'not-allowed' : 'pointer',
+              cursor: !step1Ready ? 'not-allowed' : 'pointer',
             }}
           >
             Next

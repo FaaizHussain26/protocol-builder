@@ -48,7 +48,7 @@ export default function Sidebar({
           <Layers size={18} color="#fff" />
         </div>
         <div style={{ minWidth: 0 }}>
-          <p style={{ fontWeight: 800, fontSize: 14.5, color: '#fff', letterSpacing: -0.2, lineHeight: 1.2 }}>eSource Builder</p>
+          <p style={{ fontWeight: 800, fontSize: 14.5, color: '#fff', letterSpacing: -0.2, lineHeight: 1.2 }}>EsourcEngine</p>
           <p style={{ fontSize: 9.5, fontWeight: 700, color: '#f6a06b', letterSpacing: 1, textTransform: 'uppercase' }}>Protocol Builder</p>
         </div>
       </div>
