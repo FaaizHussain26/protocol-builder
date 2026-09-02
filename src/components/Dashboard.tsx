@@ -1,23 +1,21 @@
 import { useEffect, useState } from 'react';
 import {
-  Layers, FolderOpen, SlidersHorizontal, Sparkles, FileText,
+  Layers, FolderOpen, Sparkles,
   Loader, AlertCircle, ArrowRight, ClipboardList, CalendarDays, PenLine,
 } from 'lucide-react';
-import { listStudies, listTemplates, getStudy, isConfigured } from '../utils/api';
-import type { StudyModel, StudySummary, Template } from '../types/study';
+import { listStudies, getStudy, isConfigured } from '../utils/api';
+import type { StudyModel, StudySummary } from '../types/study';
 
 interface DashboardProps {
   onNewBuild: () => void;
   onOpenStudy: (study: StudyModel, id: string) => void;
   onOpenLibrary: () => void;
   onOpenDrafts: () => void;
-  onOpenTemplates: () => void;
 }
 
 // Workspace home: totals across all saved data + recent eSources + quick actions.
-export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOpenDrafts, onOpenTemplates }: DashboardProps) {
+export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOpenDrafts }: DashboardProps) {
   const [studies, setStudies] = useState<StudySummary[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(isConfigured);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -25,11 +23,13 @@ export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOp
   useEffect(() => {
     if (!isConfigured) return;
     let alive = true;
-    Promise.allSettled([listStudies(), listTemplates()]).then(([s, t]) => {
+    listStudies().then((s) => {
       if (!alive) return;
-      if (s.status === 'fulfilled') setStudies(s.value);
-      if (t.status === 'fulfilled') setTemplates(t.value);
-      if (s.status === 'rejected') setError(s.reason instanceof Error ? s.reason.message : 'Failed to load workspace data');
+      setStudies(s);
+      setLoading(false);
+    }).catch((e) => {
+      if (!alive) return;
+      setError(e instanceof Error ? e.message : 'Failed to load workspace data');
       setLoading(false);
     });
     return () => { alive = false; };
@@ -57,7 +57,7 @@ export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOp
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 26, fontWeight: 800, color: '#0b1220', letterSpacing: -0.6 }}>Dashboard</h1>
         <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 4 }}>
-          Everything in your eSource workspace — builds, templates, and review activity.
+          Everything in your eSource workspace — builds and review activity.
         </p>
       </div>
 
@@ -78,7 +78,6 @@ export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOp
         <StatCard icon={<PenLine size={17} />} tint="#f59e0b" label="Drafts in review" value={drafts.length} loading={loading} onClick={onOpenDrafts} />
         <StatCard icon={<ClipboardList size={17} />} tint="#7c3aed" label="Fields across builds" value={totalFields} loading={loading} />
         <StatCard icon={<CalendarDays size={17} />} tint="#f26a1b" label="Visits scheduled" value={totalVisits} loading={loading} />
-        <StatCard icon={<SlidersHorizontal size={17} />} tint="#0d9488" label="Preference templates" value={templates.length} loading={loading} onClick={onOpenTemplates} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, alignItems: 'start' }}>
@@ -141,13 +140,6 @@ export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOp
             title="New Build"
             text="Upload a protocol + eCRF and let the AI build the structured eSource."
             onClick={onNewBuild}
-          />
-          <ActionCard
-            icon={<FileText size={17} color="#fff" />}
-            iconBg="linear-gradient(135deg, #8b5cf6, #6d28d9)"
-            title="Import an eSource"
-            text="Turn an existing eSource into a preferences template — the AI detects your conventions."
-            onClick={onOpenTemplates}
           />
         </div>
       </div>

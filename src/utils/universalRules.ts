@@ -341,5 +341,5 @@ export const UNIVERSAL_QUESTIONS: TemplateQuestion[] = GROUPS.flatMap((g) =>
   })),
 );
 
-// Group labels in display order (used by the TemplateManager Questions tab).
+// Group labels in display order (used by the New Build wizard Universal Rules step).
 export const UNIVERSAL_GROUPS: string[] = GROUPS.map((g) => g.group);

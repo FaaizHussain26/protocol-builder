@@ -6,7 +6,7 @@ import type { StudyModel } from '../types/study';
 
 export const SIDEBAR_WIDTH = 240;
 
-export type AppView = 'dashboard' | 'builder' | 'library' | 'drafts' | 'templates' | 'trash';
+export type AppView = 'dashboard' | 'builder' | 'library' | 'drafts' | 'trash';
 export type StudyTab = 'build' | 'folders' | 'eligibility' | 'intelligence' | 'export' | 'settings';
 
 interface SidebarProps {
@@ -63,8 +63,6 @@ export default function Sidebar({
         active={view === 'drafts'} onClick={() => onNavigate('drafts')} disabled={!apiConfigured} />
       <NavItem icon={<FolderOpen size={15} />} label="My E-Sources"
         active={view === 'library'} onClick={() => onNavigate('library')} disabled={!apiConfigured} />
-      <NavItem icon={<SlidersHorizontal size={15} />} label="Preferences Templates"
-        active={view === 'templates'} onClick={() => onNavigate('templates')} disabled={!apiConfigured} />
       <NavItem icon={<Trash2 size={15} />} label="Trash"
         active={view === 'trash'} onClick={() => onNavigate('trash')} disabled={!apiConfigured} />
 

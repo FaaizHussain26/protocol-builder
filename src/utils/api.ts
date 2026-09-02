@@ -6,10 +6,8 @@ import type {
   ValidationRule,
   IngestedDocument,
   StudySummary,
-  Template,
   TemplatePreferences,
   TemplateQuestion,
-  EsourceAnalysis,
 } from '../types/study';
 
 export interface BuildOptions {
@@ -209,58 +207,7 @@ export async function permanentlyDeleteStudy(id: string): Promise<void> {
   await req<{ ok: boolean }>(`/api/studies/${id}/permanent`, { method: 'DELETE' });
 }
 
-// ---- Templates ----
-export async function listTemplates(): Promise<Template[]> {
-  const { items } = await req<{ items: Template[] }>('/api/templates');
-  return items;
-}
-
-export async function createTemplate(t: Omit<Template, 'id'>): Promise<Template> {
-  const { template } = await req<{ template: Template }>('/api/templates', { method: 'POST', body: JSON.stringify(t) });
-  return template;
-}
-
-export async function updateTemplate(id: string, t: Omit<Template, 'id'>): Promise<Template> {
-  const { template } = await req<{ template: Template }>(`/api/templates/${id}`, { method: 'PUT', body: JSON.stringify(t) });
-  return template;
-}
-
-export async function deleteTemplate(id: string): Promise<void> {
-  await req<{ ok: boolean }>(`/api/templates/${id}`, { method: 'DELETE' });
-}
-
-// ---- eSource → template analysis ----
-// Same async-job pattern as the build: POST returns a jobId, then poll.
-type AnalyzeStatus = { status: 'pending' | 'done' | 'error'; analysis?: EsourceAnalysis; error?: string };
-
-const ANALYZE_POLL_MS = 2500;
-const ANALYZE_MAX_WAIT_MS = 10 * 60 * 1000;
-
-export async function analyzeEsource(esourceText: string, fileName?: string): Promise<EsourceAnalysis> {
-  const { jobId } = await req<{ jobId: string }>('/api/templates/analyze', {
-    method: 'POST',
-    body: JSON.stringify({ esourceText, fileName }),
-  });
-
-  const start = Date.now();
-  let fails = 0;
-  for (;;) {
-    await sleep(ANALYZE_POLL_MS);
-    let s: AnalyzeStatus;
-    try {
-      s = await req<AnalyzeStatus>(`/api/templates/analyze/status/${jobId}`, {}, 0);
-      fails = 0;
-    } catch (e) {
-      if (++fails >= BUILD_MAX_POLL_FAILS) throw e;
-      continue;
-    }
-    if (s.status === 'done' && s.analysis) return s.analysis;
-    if (s.status === 'error') throw new Error(s.error || 'eSource analysis failed on the server.');
-    if (Date.now() - start > ANALYZE_MAX_WAIT_MS) throw new Error('eSource analysis timed out. Please try again.');
-  }
-}
-
-// ---- Custom "Plan Mode" questions (persist across template creations) ----
+// ---- Custom "Plan Mode" questions ----
 export async function listQuestions(): Promise<TemplateQuestion[]> {
   const { items } = await req<{ items: TemplateQuestion[] }>('/api/questions');
   return items;

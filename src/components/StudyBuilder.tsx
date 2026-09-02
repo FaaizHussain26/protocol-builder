@@ -875,6 +875,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       onApplyToAllForms={applySectionToAllForms}
                       onDuplicateField={duplicateField}
                       onDeleteField={(formId, fieldId) => { if (window.confirm('Delete this field?')) deleteField(formId, fieldId); }}
+                      showFieldTypeBadge={study.showFieldTypeBadge !== false}
                     />
                   ) : (
                     <p style={{ color: '#94a3b8', fontSize: 13 }}>This visit has no forms yet. Use “Add form” to create one.</p>

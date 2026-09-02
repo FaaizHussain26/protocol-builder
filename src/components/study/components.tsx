@@ -24,7 +24,7 @@ export function CounterChip({ label, value, color }: { label: string; value: num
 }
 
 
-export function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onReorderFields, onAddSection, onDuplicateContent, onDuplicateSection, onApplyToAllForms, onDuplicateField, onDeleteField }: {
+export function FormBlock({ form, filter, onField, onRule, onFormReview, onEditField, onAddField, onUpdateForm, onRegenerate, regenerating, onDeleteForm, onDuplicateForm, onReorderFields, onAddSection, onDuplicateContent, onDuplicateSection, onApplyToAllForms, onDuplicateField, onDeleteField, showFieldTypeBadge = true }: {
   form: StudyForm;
   filter: 'all' | ReviewStatus;
   onField: (formId: string, fieldId: string, patch: Partial<StudyField>) => void;
@@ -44,6 +44,8 @@ export function FormBlock({ form, filter, onField, onRule, onFormReview, onEditF
   onApplyToAllForms: (formId: string, section: string | null) => void;
   onDuplicateField: (formId: string, fieldId: string) => void;
   onDeleteField: (formId: string, fieldId: string) => void;
+  /** Plan Mode: show the input-type badge under each field. */
+  showFieldTypeBadge?: boolean;
 }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const visibleFields = filter === 'all' ? form.fields : form.fields.filter(f => f.reviewStatus === filter);
@@ -176,7 +178,8 @@ export function FormBlock({ form, filter, onField, onRule, onFormReview, onEditF
               onEdit={() => onEditField(form.id, field)}
               onDuplicate={() => onDuplicateField(form.id, field.id)}
               onDelete={() => onDeleteField(form.id, field.id)}
-              dragHandle={handle} />
+              dragHandle={handle}
+              showFieldTypeBadge={showFieldTypeBadge} />
           );
 
           if (!canReorder) {
@@ -350,13 +353,14 @@ function FormAlerts({ form, onUpdateForm }: { form: StudyForm; onUpdateForm: (fo
   );
 }
 
-function FieldCard({ field, onChange, onEdit, onDuplicate, onDelete, dragHandle }: {
+function FieldCard({ field, onChange, onEdit, onDuplicate, onDelete, dragHandle, showFieldTypeBadge = true }: {
   field: StudyField;
   onChange: (patch: Partial<StudyField>) => void;
   onEdit: () => void;
   onDuplicate?: () => void;
   onDelete?: () => void;
   dragHandle?: React.ReactNode;
+  showFieldTypeBadge?: boolean;
 }) {
   const flagged = field.confidence === 'low' && field.reviewStatus === 'pending';
 
@@ -395,8 +399,14 @@ function FieldCard({ field, onChange, onEdit, onDuplicate, onDelete, dragHandle 
             <FieldInput field={field} disabled={field.reviewStatus === 'rejected'} />
           </div>
 
+          {field.footnote && (
+            <p style={{ fontSize: 11.5, color: '#64748b', margin: '6px 0 0', lineHeight: 1.45, fontStyle: 'italic' }}>
+              {field.footnote}
+            </p>
+          )}
+
           <div style={{ display: 'flex', gap: 7, marginTop: 9, flexWrap: 'wrap', alignItems: 'center' }}>
-            <TypeBadge type={field.type} />
+            {showFieldTypeBadge && <TypeBadge type={field.type} />}
             <ConfidenceBadge level={field.confidence} compact />
             {flagged && <Pill bg="#fffbeb" color="#b45309"><AlertTriangle size={11} /> Needs review</Pill>}
             {field.alert && (

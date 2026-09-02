@@ -1,27 +1,29 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Sparkles, AlertCircle, Loader, CheckCircle2,
-  FileText, Layers, AlertTriangle, FileOutput,
+  Loader, CheckCircle2, FileText,
 } from 'lucide-react';
-import DocumentUploadBox from './components/DocumentUploadBox';
-import OptionsPanel from './components/OptionsPanel';
+import NewBuildWizard from './components/NewBuildWizard';
 import StudyBuilder, { type Tab as StudyTab } from './components/StudyBuilder';
 import StudyLibrary from './components/StudyLibrary';
-import TemplateManager from './components/TemplateManager';
 import Sidebar, { SIDEBAR_WIDTH, type AppView } from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import PassLock, { isUnlocked, lockApp } from './components/PassLock';
 import { extractTextFromFiles } from './utils/extractText';
-import { buildStudyFromDocuments, reviewStudyForms, listTemplates } from './utils/api';
-import type { BuildOptions, BuildTreeRow } from './utils/api';
-import type { StudyModel, IngestedDocument, Template } from './types/study';
+import { buildStudyFromDocuments, reviewStudyForms } from './utils/api';
+import type { BuildTreeRow } from './utils/api';
+import type { StudyModel, IngestedDocument, TemplatePreferences } from './types/study';
+import { DEFAULT_PREFERENCES } from './types/study';
 import { DEMO_STUDY } from './utils/demoStudy';
 
 type Step = 'upload' | 'processing' | 'build';
 
 const CONFIGURED = !!import.meta.env.VITE_API_BASE_URL;
 const DEMO_MODE = typeof window !== 'undefined' && window.location.hash === '#demo';
+
+function blankPrefs(): TemplatePreferences {
+  return { ...DEFAULT_PREFERENCES };
+}
 
 // URL <-> view mapping. Each main view is a real route so refresh, back/forward,
 // and deep links land on the right page; unknown paths redirect to /dashboard.
@@ -30,7 +32,6 @@ const VIEW_TO_PATH: Record<AppView, string> = {
   builder: '/build',
   library: '/e-sources',
   drafts: '/drafts',
-  templates: '/templates',
   trash: '/trash',
 };
 const PATH_TO_VIEW: Record<string, AppView> = {
@@ -38,7 +39,6 @@ const PATH_TO_VIEW: Record<string, AppView> = {
   '/build': 'builder',
   '/e-sources': 'library',
   '/drafts': 'drafts',
-  '/templates': 'templates',
   '/trash': 'trash',
 };
 
@@ -60,11 +60,11 @@ export default function App() {
   const [step, setStep] = useState<Step>(DEMO_MODE ? 'build' : 'upload');
   const [protocolFiles, setProtocolFiles] = useState<File[]>([]);
   const [ecrfFiles, setEcrfFiles] = useState<File[]>([]);
-  const [options, setOptions] = useState<BuildOptions>({});
+  const [prefs, setPrefs] = useState<TemplatePreferences>(blankPrefs);
+  const [wizardKey, setWizardKey] = useState(0);
   const [study, setStudy] = useState<StudyModel | null>(DEMO_MODE ? DEMO_STUDY : null);
   const [currentStudyId, setCurrentStudyId] = useState<string | undefined>(undefined);
   const [corpusText, setCorpusText] = useState('');
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [ingestIndex, setIngestIndex] = useState(0);
@@ -72,9 +72,10 @@ export default function App() {
   // Live build tree streamed from the server (arm → folder → forms).
   const [buildTree, setBuildTree] = useState<BuildTreeRow[]>([]);
 
-  // Load saved templates (when a backend is configured) for the build options.
-  const loadTemplates = () => { if (CONFIGURED) listTemplates().then(setTemplates).catch(() => {}); };
-  useEffect(loadTemplates, []);
+  const resetWizard = () => {
+    setPrefs(blankPrefs());
+    setWizardKey((k) => k + 1);
+  };
 
   // Protocol leads the corpus (it carries the SOA); the eCRF enriches fields.
   const allFiles = [...protocolFiles, ...ecrfFiles];
@@ -110,11 +111,9 @@ export default function App() {
       setProgress(52);
 
       setStageMsg('AI is building the structured study…');
-      const prefs = templates.find(t => t.id === options.templateId)?.preferences;
-      // Live progress streams from the server: real phase, percent, and the
-      // arm → folder → form tree filling in as each form is built.
+      // The wizard owns TemplatePreferences — no saved-template lookup.
       let buildJobId: string | undefined;
-      const built = await buildStudyFromDocuments(text, documents, options, prefs, (p) => {
+      const built = await buildStudyFromDocuments(text, documents, {}, prefs, (p) => {
         if (p.phase) setStageMsg(p.phase);
         if (typeof p.progress === 'number') setProgress(50 + Math.round(p.progress * 0.38));
         if (p.partial) setBuildTree(p.partial);
@@ -160,6 +159,7 @@ export default function App() {
     setEcrfFiles([]);
     setStudyTab('build');
     setStep('upload');
+    resetWizard();
   };
 
   const handleOpenSaved = (s: StudyModel, id: string) => {
@@ -176,6 +176,8 @@ export default function App() {
     if (step === 'build' && study) {
       if (!window.confirm('Discard the current eSource and start a new build?')) return;
       handleReset();
+    } else {
+      resetWizard();
     }
     setView('builder');
   };
@@ -211,113 +213,24 @@ export default function App() {
             onOpenStudy={handleOpenSaved}
             onOpenLibrary={() => setView('library')}
             onOpenDrafts={() => setView('drafts')}
-            onOpenTemplates={() => setView('templates')}
           />
         )}
         {view === 'library' && <StudyLibrary mode="final" onOpen={handleOpenSaved} />}
         {view === 'drafts' && <StudyLibrary mode="drafts" onOpen={handleOpenSaved} />}
         {view === 'trash' && <StudyLibrary mode="trash" onOpen={handleOpenSaved} />}
-        {view === 'templates' && <TemplateManager onChanged={loadTemplates} />}
 
         {view === 'builder' && step === 'upload' && (
-          <>
-            {/* Page header: title left, slim pipeline strip right. */}
-            <div className="float-in" style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              gap: 18, flexWrap: 'wrap', marginBottom: 18,
-            }}>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0b1220', letterSpacing: -0.5 }}>New Build</h1>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                {[
-                  { icon: <FileText size={12} />, text: 'Ingestion' },
-                  { icon: <Layers size={12} />, text: 'Build' },
-                  { icon: <CheckCircle2 size={12} />, text: 'Review' },
-                  { icon: <AlertTriangle size={12} />, text: 'Intelligence' },
-                  { icon: <FileOutput size={12} />, text: 'Export' },
-                ].map(({ icon, text }, i) => (
-                  <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 5,
-                      padding: '5px 10px', borderRadius: 20, background: 'rgba(255,255,255,0.85)',
-                      border: '1px solid rgba(226,232,240,0.9)', fontSize: 11.5, fontWeight: 600, color: '#475569',
-                    }}>
-                      <span style={{ color: i === 1 ? '#f26a1b' : '#2563eb', display: 'inline-flex' }}>{icon}</span> {text}
-                    </div>
-                    {i < 4 && <span style={{ color: '#cbd5e1', fontSize: 12 }}>→</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <OptionsPanel options={options} onChange={setOptions} templates={templates} />
-
-            <div style={{
-              background: '#fff', borderRadius: 22, border: '1px solid #eaeef4',
-              boxShadow: '0 18px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.06)', overflow: 'hidden',
-            }}>
-              <div style={{ height: 4, background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 35%, #f26a1b 100%)' }} />
-              <div style={{ padding: '20px 26px 22px' }}>
-                <div style={{ marginBottom: 14 }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginBottom: 3 }}>Study Documents</p>
-                  <p style={{ fontSize: 12.5, color: '#94a3b8', lineHeight: 1.5 }}>
-                    The <strong style={{ color: '#475569' }}>Protocol</strong> drives the visit schedule (its Schedule of Activities table + footnotes).
-                    The <strong style={{ color: '#475569' }}>eCRF / Completion Guide</strong> supplies the exact forms and fields.
-                  </p>
-                </div>
-
-                <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                  <DocumentUploadBox
-                    label="Protocol"
-                    required
-                    hint="Clinical study protocol containing the Schedule of Activities."
-                    files={protocolFiles}
-                    onFilesChange={setProtocolFiles}
-                    accent="#2563eb"
-                  />
-                  <DocumentUploadBox
-                    label="eCRF / Completion Guide"
-                    hint="eCRF or CRF completion requirements (recommended for full field detail)."
-                    files={ecrfFiles}
-                    onFilesChange={setEcrfFiles}
-                    accent="#f26a1b"
-                  />
-                </div>
-
-                <button onClick={handleBuild} disabled={protocolFiles.length === 0} style={{
-                  width: '100%', marginTop: 16, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', gap: 9, padding: '13px', borderRadius: 13, border: 'none',
-                  background: protocolFiles.length === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #fb8c3b 0%, #f26a1b 55%, #ea5e0b 100%)',
-                  color: '#fff', fontSize: 15, fontWeight: 700, letterSpacing: 0.1,
-                  cursor: protocolFiles.length === 0 ? 'not-allowed' : 'pointer',
-                  boxShadow: protocolFiles.length === 0 ? 'none' : '0 10px 22px rgba(234,94,11,0.32), 0 1px 0 rgba(255,255,255,0.3) inset',
-                  transition: 'transform 0.12s ease, box-shadow 0.2s ease',
-                }}>
-                  <Sparkles size={17} />
-                  Build Structured eSource{allFiles.length > 1 ? ` from ${allFiles.length} documents` : ''}
-                </button>
-              </div>
-            </div>
-
-            {error && (
-              <div style={{
-                marginTop: 16, padding: '14px 18px', borderRadius: 12,
-                background: '#fef2f2', border: '1px solid #fecaca',
-                display: 'flex', alignItems: 'flex-start', gap: 10,
-              }}>
-                <AlertCircle size={18} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
-                <div>
-                  <p style={{ fontWeight: 600, color: '#dc2626', fontSize: 14 }}>Error</p>
-                  <p style={{ color: '#ef4444', fontSize: 13, marginTop: 2 }}>{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Disclaimer */}
-            <p style={{ textAlign: 'center', fontSize: 11.5, color: '#94a3b8', marginTop: 14, maxWidth: 640, marginInline: 'auto', lineHeight: 1.5 }}>
-              Conceptual reference only. AI generation is real; study data may be representative. Every AI output is a
-              draft a human approves — not certified or submission-ready.
-            </p>
-          </>
+          <NewBuildWizard
+            key={wizardKey}
+            prefs={prefs}
+            onPrefsChange={setPrefs}
+            protocolFiles={protocolFiles}
+            onProtocolFilesChange={setProtocolFiles}
+            ecrfFiles={ecrfFiles}
+            onEcrfFilesChange={setEcrfFiles}
+            onBuild={handleBuild}
+            error={error}
+          />
         )}
 
         {view === 'builder' && step === 'processing' && (

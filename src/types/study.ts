@@ -40,6 +40,8 @@ export interface StudyField {
   expression?: string;
   /** Optional display-format hint (e.g. date segment order). Phase 2. */
   format?: string;
+  /** Protocol/SOA footnote or extra site note shown under the field. */
+  footnote?: string;
   // ---- Traceability ----
   /** Source document this field was derived from. */
   source?: string;
@@ -213,6 +215,8 @@ export interface StudyModel {
   /** Applied template and date-format preference. Phase 2. */
   templateId?: string;
   dateFormatPreference?: string;
+  /** Persist the Plan Mode "input-type badge" choice for this study. */
+  showFieldTypeBadge?: boolean;
 }
 
 // ---- Templates: reusable form preferences applied at build time (Phase 2) ----
@@ -240,6 +244,16 @@ export interface TemplatePreferences {
   instructions?: string;
   /** Plan-mode questions selected to feed the build prompt. */
   questions?: TemplateQuestion[];
+  /** Emit per-field completion guidance (descriptions). */
+  fieldDescriptions?: boolean;
+  /** How much completion-guidance text to generate when fieldDescriptions is on. */
+  fieldDescriptionDetail?: 'high' | 'medium' | 'low';
+  /** Emit per-field footnotes. */
+  fieldFootnotes?: boolean;
+  /** How much footnote text to generate when fieldFootnotes is on. */
+  fieldFootnoteDetail?: 'high' | 'medium' | 'low';
+  /** Show the input-type badge under each field (display-only). */
+  showFieldTypeBadge?: boolean;
 }
 
 // A selectable "Plan Mode" question fed into the build prompt.
@@ -321,6 +335,11 @@ export const DEFAULT_PREFERENCES: TemplatePreferences = {
   documentUploadFields: true,
   generalSections: true,
   screeningOrder: true,
+  fieldDescriptions: true,
+  fieldDescriptionDetail: 'medium',
+  fieldFootnotes: true,
+  fieldFootnoteDetail: 'medium',
+  showFieldTypeBadge: true,
 };
 
 // Lightweight row for the saved-studies ("My Studies") list.

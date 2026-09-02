@@ -153,7 +153,18 @@ export function generateCompletionGuidelinesPDF(study: StudyModel): void {
         doc.setFontSize(9);
         const g = doc.splitTextToSize(f.completionGuidance ?? '', contentW - 6);
         doc.text(g, mL + 3, y);
-        y += g.length * 4.4 + 5;
+        y += g.length * 4.4 + 2;
+        if (f.footnote) {
+          doc.setTextColor(100, 116, 139);
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(8);
+          const fn = doc.splitTextToSize(f.footnote, contentW - 6);
+          doc.text(fn, mL + 3, y);
+          y += fn.length * 4.0 + 3;
+          doc.setFont('helvetica', 'normal');
+        } else {
+          y += 3;
+        }
       }
       y += 3;
     }
@@ -238,6 +249,16 @@ function drawField(doc: jsPDF, f: import('../types/study').StudyField, x: number
       break;
     }
     default: box(w, 6.5);
+  }
+
+  if (f.footnote) {
+    cy += 2;
+    doc.setTextColor(100, 116, 139);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    const fn = doc.splitTextToSize(f.footnote, w);
+    doc.text(fn, x, cy + 2.4);
+    cy += fn.length * 3.4 + 1;
   }
 
   return cy + 4;
@@ -367,7 +388,8 @@ export function generateBuildSpecPDF(study: StudyModel, stats: DocStats): void {
             : ft === 'file' ? 12
             : isChoice ? optCount * 5.8 + 2
             : 10;
-          br(14 + ctrlH);
+          const fnH = f.footnote ? Math.ceil(f.footnote.length / 90) * 3.6 + 4 : 0;
+          br(14 + ctrlH + fnH);
           y = drawField(doc, f, mL + 7, y, contentW - 12);
         }
       }
