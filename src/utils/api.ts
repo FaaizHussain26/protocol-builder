@@ -13,6 +13,8 @@ import type {
   VisitInstance,
   VisitInstanceStatus,
   FormSubmission,
+  AuditLogEntry,
+  AuditEntityType,
 } from '../types/study';
 import { getToken, reportUnauthorized, type AuthUser } from './authToken';
 
@@ -335,4 +337,23 @@ export async function submitRecord(submissionId: string, recordId: string): Prom
 export async function signRecord(submissionId: string, recordId: string): Promise<FormSubmission> {
   const { submission } = await req<{ submission: FormSubmission }>(`/api/submissions/${submissionId}/records/${recordId}/sign`, { method: 'POST' });
   return submission;
+}
+
+// ---- Audit trail (Phase 4) ----
+export interface AuditFilters {
+  entityType?: AuditEntityType;
+  userId?: string;
+  from?: string;
+  to?: string;
+}
+
+export async function listAuditLog(studyId: string, filters: AuditFilters = {}): Promise<AuditLogEntry[]> {
+  const params = new URLSearchParams();
+  if (filters.entityType) params.set('entityType', filters.entityType);
+  if (filters.userId) params.set('userId', filters.userId);
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  const qs = params.toString();
+  const { items } = await req<{ items: AuditLogEntry[] }>(`/api/studies/${studyId}/audit${qs ? `?${qs}` : ''}`);
+  return items;
 }

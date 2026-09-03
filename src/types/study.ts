@@ -278,6 +278,23 @@ export interface FormSubmission {
   records: SubmissionRecord[];
 }
 
+// ---- Audit trail (Phase 4): append-only log of build-definition and submission changes ----
+export type AuditEntityType = 'field' | 'form-submission-record';
+
+export interface AuditLogEntry {
+  id: string;
+  studyId: string;
+  entityType: AuditEntityType;
+  entityId: string;
+  action: string;
+  summary: string;
+  before?: unknown;
+  after?: unknown;
+  userId?: string;
+  userName?: string;
+  createdAt: string;
+}
+
 // ---- Templates: reusable form preferences applied at build time (Phase 2) ----
 export type DateSegment = 'D' | 'M' | 'Y';
 
