@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Upload, FileText, X, AlertCircle, Plus } from 'lucide-react';
+import { Upload, X, AlertCircle, Plus } from 'lucide-react';
 
 interface DocumentUploadBoxProps {
   /** Title shown above the box, e.g. "Protocol" or "eCRF / Completion Guide". */
@@ -29,7 +29,7 @@ export default function DocumentUploadBox({
   isProcessing = false,
   maxFiles = 3,
   required,
-  accent = '#2563eb',
+  accent = '#BE4A46',
 }: DocumentUploadBoxProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -79,69 +79,70 @@ export default function DocumentUploadBox({
   const formatSize = (bytes: number) =>
     bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
+  const ext = (name: string) => (name.split('.').pop() ?? '').toUpperCase();
+
   const canAddMore = files.length < maxFiles;
 
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#17181A' }}>{label}</span>
         {required && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#c2410c', background: '#fdecdf', padding: '1px 7px', borderRadius: 10, letterSpacing: 0.3 }}>
-            REQUIRED
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#A02D24', background: '#FBEDEB', padding: '1px 7px', borderRadius: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            Required
           </span>
         )}
-        <span style={{ marginLeft: 'auto', fontSize: 11.5, color: '#94a3b8' }}>{files.length}/{maxFiles}</span>
+        <span style={{ marginLeft: 'auto', fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: '#A29C90' }}>{files.length}/{maxFiles}</span>
       </div>
-      {hint && <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 10 }}>{hint}</p>}
+      {hint && <p style={{ fontSize: 12, color: '#8A857B', marginBottom: 10 }}>{hint}</p>}
 
       <input ref={inputRef} type="file" accept={ACCEPTED} multiple onChange={onInputChange} style={{ display: 'none' }} />
 
       {files.length === 0 ? (
         <div
-          className="lift"
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
           style={{
-            border: `2px dashed ${dragOver ? accent : '#cbd5e1'}`,
-            borderRadius: 14, padding: '28px 18px', textAlign: 'center', cursor: 'pointer',
-            background: dragOver ? '#eff6ff' : '#f8fafc', transition: 'all 0.2s ease',
+            border: `1.5px dashed ${dragOver ? accent : '#D3CEC2'}`,
+            borderRadius: 16, padding: '28px 18px', textAlign: 'center', cursor: 'pointer',
+            background: '#fff', transition: 'border-color 0.15s ease',
           }}
         >
           <div style={{
-            width: 48, height: 48, borderRadius: '50%', background: dragOver ? '#dbeafe' : '#e8edf4',
+            width: 44, height: 44, borderRadius: '50%', background: dragOver ? '#FDF1F1' : '#F7F6F3',
             display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px',
           }}>
-            <Upload size={22} color={dragOver ? accent : '#64748b'} />
+            <Upload size={20} color={dragOver ? accent : '#8A857B'} />
           </div>
-          <p style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 4 }}>Drag & drop or click</p>
-          <p style={{ fontSize: 12, color: '#94a3b8' }}>PDF · DOCX · TXT · max {MAX_MB}MB</p>
+          <p style={{ fontSize: 14.5, fontWeight: 600, color: '#17181A', marginBottom: 4 }}>Drag & drop or click</p>
+          <p style={{ fontSize: 12.5, color: '#8A857B' }}>PDF · DOCX · TXT · max {MAX_MB}MB</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {files.map((file, index) => (
             <div key={`${file.name}-${index}`} style={{
-              border: '1.5px solid #e8edf4', borderRadius: 11, padding: '10px 12px', background: '#f8fafc',
-              display: 'flex', alignItems: 'center', gap: 11,
+              border: '1px solid #E6E3DC', borderRadius: 12, padding: '12px 14px', background: '#fff',
+              display: 'flex', alignItems: 'center', gap: 12,
             }}>
-              <div style={{ width: 34, height: 34, borderRadius: 9, background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <FileText size={17} color={accent} />
-              </div>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fontWeight: 500, padding: '3px 7px', borderRadius: 5, background: '#F1EFEA', color: '#6E6A62', flexShrink: 0 }}>
+                {ext(file.name)}
+              </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontWeight: 600, color: '#1e293b', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
-                <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 1 }}>{formatSize(file.size)}</p>
+                <p style={{ fontWeight: 600, color: '#17181A', fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+                <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: '#918B7F', marginTop: 3 }}>{formatSize(file.size)}</p>
               </div>
               {!isProcessing && (
-                <button onClick={() => removeFile(index)} className="lift" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#94a3b8', flexShrink: 0 }} aria-label={`Remove ${file.name}`}>
+                <button onClick={() => removeFile(index)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#A29C90', flexShrink: 0 }} aria-label={`Remove ${file.name}`}>
                   <X size={16} />
                 </button>
               )}
             </div>
           ))}
           {canAddMore && !isProcessing && (
-            <div className="lift" onClick={() => inputRef.current?.click()} style={{
-              border: '1.5px dashed #cbd5e1', borderRadius: 11, padding: '9px', cursor: 'pointer', background: '#fff',
+            <div onClick={() => inputRef.current?.click()} style={{
+              border: '1.5px dashed #DCD8CF', borderRadius: 12, padding: '9px', cursor: 'pointer', background: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
             }}>
               <Plus size={15} color={accent} />
@@ -152,9 +153,9 @@ export default function DocumentUploadBox({
       )}
 
       {error && (
-        <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 9, background: '#fef2f2', border: '1px solid #fecaca', display: 'flex', alignItems: 'flex-start', gap: 7 }}>
-          <AlertCircle size={14} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
-          <p style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>{error}</p>
+        <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 9, background: '#FBEDEB', border: '1px solid #F1CFCE', display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+          <AlertCircle size={14} color="#A02D24" style={{ flexShrink: 0, marginTop: 1 }} />
+          <p style={{ color: '#A02D24', fontSize: 12, margin: 0 }}>{error}</p>
         </div>
       )}
     </div>

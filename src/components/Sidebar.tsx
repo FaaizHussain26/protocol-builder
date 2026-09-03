@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import type { StudyModel } from '../types/study';
 
-export const SIDEBAR_WIDTH = 240;
+export const SIDEBAR_WIDTH = 244;
 
 export type AppView = 'dashboard' | 'builder' | 'library' | 'drafts' | 'trash';
 export type StudyTab = 'build' | 'folders' | 'eligibility' | 'intelligence' | 'export' | 'settings';
@@ -31,25 +31,21 @@ export default function Sidebar({
     <aside style={{
       position: 'fixed', top: 0, left: 0, bottom: 0, width: SIDEBAR_WIDTH, zIndex: 100,
       display: 'flex', flexDirection: 'column', boxSizing: 'border-box',
-      background:
-        'radial-gradient(420px 260px at 110% -8%, rgba(242,106,27,0.22) 0%, rgba(242,106,27,0) 60%),' +
-        'linear-gradient(180deg, #0b1220 0%, #101b2f 60%, #15233c 100%)',
-      borderRight: '1px solid rgba(255,255,255,0.08)',
-      padding: '20px 14px 16px',
+      background: '#17100F',
+      padding: '22px 14px 16px',
     }}>
       {/* Brand */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', marginBottom: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 22px' }}>
         <div style={{
-          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-          background: 'linear-gradient(140deg, #0f172a 0%, #1e293b 45%, #f26a1b 130%)',
+          width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+          background: 'linear-gradient(160deg, #F08080, #9C3733)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 6px 16px rgba(242,106,27,0.28), 0 1px 0 rgba(255,255,255,0.25) inset',
+          color: '#fff', fontSize: 14, fontWeight: 700,
         }}>
-          <Layers size={18} color="#fff" />
+          E
         </div>
         <div style={{ minWidth: 0 }}>
-          <p style={{ fontWeight: 800, fontSize: 14.5, color: '#fff', letterSpacing: -0.2, lineHeight: 1.2 }}>EsourcEngine</p>
-          <p style={{ fontSize: 9.5, fontWeight: 700, color: '#f6a06b', letterSpacing: 1, textTransform: 'uppercase' }}>Protocol Builder</p>
+          <p style={{ fontWeight: 600, fontSize: 15, color: '#F3F1EC', letterSpacing: '-0.015em', lineHeight: 1.2 }}>EsourcEngine</p>
         </div>
       </div>
 
@@ -69,21 +65,31 @@ export default function Sidebar({
       {/* Current eSource sections */}
       {studyOpen && study && (
         <>
-          <SectionLabel style={{ marginTop: 18 }}>Current eSource</SectionLabel>
-          <p style={{
-            fontSize: 11.5, color: 'rgba(226,232,240,0.55)', padding: '0 10px', marginBottom: 8,
-            overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box',
-            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4,
+          <SectionLabel style={{ marginTop: 22 }}>Current eSource</SectionLabel>
+          <div style={{
+            margin: '0 4px 10px', padding: '10px 12px', borderRadius: 10,
+            background: '#221614', border: '1px solid #33211F',
           }}>
-            {study.studyTitle}
-          </p>
+            <p style={{
+              color: '#D6D2CA', fontSize: 12.5, fontWeight: 600, lineHeight: 1.35,
+              overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box',
+              WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+            }}>
+              {study.studyTitle}
+            </p>
+            {study.protocolNumber && (
+              <p style={{ color: '#8C7875', fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, marginTop: 3 }}>
+                {study.protocolNumber}{study.phase ? ` · ${study.phase}` : ''}
+              </p>
+            )}
+          </div>
           <NavItem icon={<Layers size={15} />} label="Study Build"
             active={view === 'builder' && studyTab === 'build'} onClick={() => onStudyTab('build')} />
           <NavItem icon={<FolderTree size={15} />} label="Folders"
             active={view === 'builder' && studyTab === 'folders'} onClick={() => onStudyTab('folders')} />
           <NavItem icon={<ListChecks size={15} />} label="Eligibility" badge={study.eligibility.length || undefined}
             active={view === 'builder' && studyTab === 'eligibility'} onClick={() => onStudyTab('eligibility')} />
-          <NavItem icon={<AlertTriangle size={15} />} label="Intelligence" badge={unresolved || undefined}
+          <NavItem icon={<AlertTriangle size={15} />} label="Intelligence" badge={unresolved || undefined} badgeWarn={!!unresolved}
             active={view === 'builder' && studyTab === 'intelligence'} onClick={() => onStudyTab('intelligence')} />
           <NavItem icon={<SlidersHorizontal size={15} />} label="eSource Settings"
             active={view === 'builder' && studyTab === 'settings'} onClick={() => onStudyTab('settings')} />
@@ -93,7 +99,7 @@ export default function Sidebar({
       )}
 
       {/* Footer */}
-      <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10 }}>
+      <div style={{ marginTop: 'auto', borderTop: '1px solid #2B1D1B', paddingTop: 10 }}>
         <NavItem icon={<Lock size={14} />} label="Lock workspace" active={false} onClick={onLock} />
       </div>
     </aside>
@@ -103,37 +109,39 @@ export default function Sidebar({
 function SectionLabel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <p style={{
-      fontSize: 10, fontWeight: 700, color: 'rgba(148,163,184,0.7)', letterSpacing: 1.2,
-      textTransform: 'uppercase', padding: '0 10px', margin: '14px 0 6px', ...style,
+      fontSize: 10, fontWeight: 600, color: '#7A6663', letterSpacing: '0.11em',
+      textTransform: 'uppercase', padding: '0 10px', margin: '0 0 8px', ...style,
     }}>
       {children}
     </p>
   );
 }
 
-function NavItem({ icon, label, active, onClick, badge, disabled }: {
+function NavItem({ icon, label, active, onClick, badge, badgeWarn, disabled }: {
   icon: React.ReactNode; label: string; active: boolean; onClick: () => void;
-  badge?: number; disabled?: boolean;
+  badge?: number; badgeWarn?: boolean; disabled?: boolean;
 }) {
   return (
     <button
+      className="ee-nav-item"
       onClick={onClick} disabled={disabled} title={disabled ? 'Requires the backend API' : undefined}
       style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-        padding: '9px 10px', marginBottom: 2, borderRadius: 9, border: 'none',
-        background: active ? 'rgba(242,106,27,0.16)' : 'transparent',
-        color: disabled ? 'rgba(148,163,184,0.4)' : active ? '#fca86f' : '#cbd5e1',
-        fontSize: 13, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
-        textAlign: 'left', boxShadow: active ? '0 0 0 1px rgba(242,106,27,0.28) inset' : undefined,
-        transition: 'background 0.12s ease, color 0.12s ease',
+        padding: '8px 10px', marginBottom: 2, borderRadius: 8, border: 'none',
+        background: active ? '#3A1F1D' : 'transparent',
+        color: disabled ? '#5A4A47' : active ? '#FFE7E4' : '#B3A29F',
+        fontSize: 13.5, fontWeight: 500, cursor: disabled ? 'not-allowed' : 'pointer',
+        textAlign: 'left', transition: 'background 0.12s ease, color 0.12s ease',
       }}
     >
       <span style={{ display: 'inline-flex', flexShrink: 0 }}>{icon}</span>
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
       {badge ? (
         <span style={{
-          fontSize: 10.5, fontWeight: 700, padding: '1px 7px', borderRadius: 10,
-          background: 'rgba(255,255,255,0.12)', color: '#e2e8f0',
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, fontWeight: 500,
+          padding: '1px 7px', borderRadius: 10,
+          background: badgeWarn ? 'rgba(224,113,109,0.18)' : 'rgba(255,255,255,0.08)',
+          color: badgeWarn ? '#F0A0A0' : '#96827F',
         }}>{badge}</span>
       ) : null}
     </button>

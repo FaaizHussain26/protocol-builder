@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Layers, FolderOpen, Sparkles,
-  Loader, AlertCircle, ArrowRight, ClipboardList, CalendarDays, PenLine,
-} from 'lucide-react';
+import { Sparkles, Loader, AlertCircle, ArrowRight } from 'lucide-react';
 import { listStudies, getStudy, isConfigured } from '../utils/api';
 import type { StudyModel, StudySummary } from '../types/study';
 
@@ -39,6 +36,7 @@ export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOp
   const drafts = studies.filter((s) => s.status !== 'final');
   const totalFields = studies.reduce((a, s) => a + s.fieldCount, 0);
   const totalVisits = studies.reduce((a, s) => a + s.visitCount, 0);
+  const pendingFields = drafts.reduce((a, s) => a + Math.max(0, s.fieldCount - (s.approvedFieldCount ?? 0)), 0);
   const recent = studies.slice(0, 5); // list arrives sorted by updatedAt desc
 
   const openStudy = async (id: string) => {
@@ -53,82 +51,116 @@ export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOp
   };
 
   return (
-    <div className="anim-form" style={{ maxWidth: 1080, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#0b1220', letterSpacing: -0.6 }}>Dashboard</h1>
-        <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 4 }}>
-          Everything in your eSource workspace — builds and review activity.
-        </p>
+    <div className="anim-form" style={{ maxWidth: 1180, margin: '0 auto' }}>
+      <div style={{
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24,
+        paddingBottom: 26, borderBottom: '1px solid #E6E3DC', marginBottom: 26,
+      }}>
+        <div>
+          <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: '#8A857B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Workspace</p>
+          <h1 style={{ margin: '8px 0 0', fontSize: 30, fontWeight: 600, letterSpacing: '-0.03em', color: '#17181A' }}>Dashboard</h1>
+        </div>
+        <button className="lift" onClick={onNewBuild} style={{
+          padding: '9px 16px', borderRadius: 9, border: 'none', background: '#17181A', color: '#fff',
+          fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+        }}>
+          New eSource
+        </button>
       </div>
 
       {!isConfigured && (
-        <Notice icon={<AlertCircle size={15} color="#b45309" />} bg="#fffbeb" border="#fde68a" color="#92400e">
+        <Notice icon={<AlertCircle size={15} color="#973C38" />} bg="#FCEAEA" border="#F1CFCE" color="#973C38">
           Backend API is not configured (set <b>VITE_API_BASE_URL</b>) — workspace data is unavailable.
         </Notice>
       )}
       {error && (
-        <Notice icon={<AlertCircle size={15} color="#ef4444" />} bg="#fef2f2" border="#fecaca" color="#dc2626">
+        <Notice icon={<AlertCircle size={15} color="#A02D24" />} bg="#FBEDEB" border="#F1CFCE" color="#A02D24">
           {error}
         </Notice>
       )}
 
-      {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 22 }}>
-        <StatCard icon={<FolderOpen size={17} />} tint="#16a34a" label="Saved E-Sources" value={finals.length} loading={loading} onClick={onOpenLibrary} />
-        <StatCard icon={<PenLine size={17} />} tint="#f59e0b" label="Drafts in review" value={drafts.length} loading={loading} onClick={onOpenDrafts} />
-        <StatCard icon={<ClipboardList size={17} />} tint="#7c3aed" label="Fields across builds" value={totalFields} loading={loading} />
-        <StatCard icon={<CalendarDays size={17} />} tint="#f26a1b" label="Visits scheduled" value={totalVisits} loading={loading} />
+      {/* Stat tiles */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
+        <div style={{ background: '#17100F', borderRadius: 14, padding: '20px 22px', color: '#fff' }}>
+          <p style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.11em', textTransform: 'uppercase', color: '#A6918E' }}>Needs review</p>
+          <p style={{ fontSize: 34, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1, marginTop: 14 }}>
+            {loading ? '—' : pendingFields.toLocaleString()}
+          </p>
+          <p style={{ fontSize: 12.5, color: '#A6918E', marginTop: 8 }}>fields across {drafts.length} draft{drafts.length !== 1 ? 's' : ''}</p>
+        </div>
+        <KpiTile dot="#2F6B4F" label="Saved eSources" value={finals.length} loading={loading} sub="fully approved" onClick={onOpenLibrary} />
+        <KpiTile dot="#E0716D" label="Drafts in review" value={drafts.length} loading={loading} sub="in progress" onClick={onOpenDrafts} />
+        <KpiTile dot="#8A857B" label="Fields across builds" value={totalFields} loading={loading} sub={`${totalVisits.toLocaleString()} visits scheduled`} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, alignItems: 'start' }}>
         {/* Recent eSources */}
         <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '15px 18px', borderBottom: '1px solid #eef2f7' }}>
-            <FolderOpen size={15} color="#2563eb" />
-            <h2 style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Recent E-Sources</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px' }}>
+            <p style={{ fontSize: 15, fontWeight: 600, color: '#17181A' }}>Recent eSources</p>
             {studies.length > 5 && (
               <button className="lift" onClick={onOpenLibrary} style={{
-                marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, border: 'none',
-                background: 'none', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 5, border: 'none',
+                background: 'none', color: '#8A857B', fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
               }}>
                 View all <ArrowRight size={13} />
               </button>
             )}
           </div>
-          <div style={{ padding: '10px 14px 14px' }}>
+          {recent.length > 0 && !loading && (
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'minmax(200px,1fr) 90px 150px 100px', gap: 16,
+              padding: '0 24px 8px', fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: '#A29C90', borderBottom: '1px solid #EFECE5', whiteSpace: 'nowrap',
+            }}>
+              <div>Study</div><div style={{ textAlign: 'right' }}>Fields</div><div>Approved</div><div style={{ textAlign: 'right' }}>Updated</div>
+            </div>
+          )}
+          <div style={{ padding: recent.length > 0 && !loading ? '0 0 8px' : '10px 14px 14px' }}>
             {loading ? (
-              <p style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 13.5, padding: '20px 0', justifyContent: 'center' }}>
+              <p style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8A857B', fontSize: 13.5, padding: '20px 0', justifyContent: 'center' }}>
                 <Loader size={15} style={{ animation: 'spin 1s linear infinite' }} /> Loading…
               </p>
             ) : recent.length === 0 ? (
-              <p style={{ color: '#94a3b8', fontSize: 13.5, textAlign: 'center', padding: '20px 0' }}>
+              <p style={{ color: '#A29C90', fontSize: 13.5, textAlign: 'center', padding: '20px 0' }}>
                 No saved eSources yet — run your first build.
               </p>
-            ) : recent.map((s) => (
-              <button
-                key={s.id} className="lift" disabled={busyId === s.id} onClick={() => openStudy(s.id)}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                  marginTop: 6, borderRadius: 11, border: '1px solid #e8edf4', background: '#fafbfc',
-                  cursor: busyId === s.id ? 'wait' : 'pointer', textAlign: 'left',
-                }}
-              >
-                <span style={{ width: 34, height: 34, borderRadius: 9, background: '#eef2fb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Layers size={16} color="#2563eb" />
-                </span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.studyTitle}
+            ) : recent.map((s) => {
+              const approved = s.approvedFieldCount ?? 0;
+              const pct = s.fieldCount ? Math.round((approved / s.fieldCount) * 100) : 0;
+              const barColor = pct === 100 ? '#2F6B4F' : pct >= 50 ? '#E0716D' : '#A02D24';
+              return (
+                <button
+                  key={s.id} disabled={busyId === s.id} onClick={() => openStudy(s.id)}
+                  style={{
+                    width: '100%', display: 'grid', gridTemplateColumns: 'minmax(200px,1fr) 90px 150px 100px',
+                    gap: 16, alignItems: 'center', padding: '15px 24px', border: 'none', borderBottom: '1px solid #F4F1EA',
+                    background: 'transparent', cursor: busyId === s.id ? 'wait' : 'pointer', textAlign: 'left',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#FBFAF7'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: '#17181A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {s.studyTitle}
+                    </span>
+                    <span style={{ display: 'block', fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: '#918B7F', marginTop: 3 }}>
+                      {[s.protocolNumber, `${s.visitCount} visits`].filter(Boolean).join(' · ')}
+                    </span>
                   </span>
-                  <span style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', marginTop: 1 }}>
-                    {[s.protocolNumber, s.phase, `${s.visitCount} visits`, `${s.fieldCount} fields`].filter(Boolean).join(' · ')}
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, textAlign: 'right', color: '#17181A' }}>{s.fieldCount.toLocaleString()}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ flex: 1, height: 5, borderRadius: 3, background: '#EDEAE2', overflow: 'hidden' }}>
+                      <span style={{ display: 'block', height: '100%', borderRadius: 3, background: barColor, width: `${pct}%` }} />
+                    </span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5, color: '#6E6A62', width: 34, textAlign: 'right' }}>{pct}%</span>
                   </span>
-                </span>
-                <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
-                  {new Date(s.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </span>
-              </button>
-            ))}
+                  <span style={{ fontSize: 12, color: '#918B7F', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {new Date(s.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -136,8 +168,8 @@ export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOp
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <ActionCard
             icon={<Sparkles size={17} color="#fff" />}
-            iconBg="linear-gradient(135deg, #fb8c3b, #ea5e0b)"
-            title="New Build"
+            iconBg="#BE4A46"
+            title="New eSource"
             text="Upload a protocol + eCRF and let the AI build the structured eSource."
             onClick={onNewBuild}
           />
@@ -148,8 +180,7 @@ export default function Dashboard({ onNewBuild, onOpenStudy, onOpenLibrary, onOp
 }
 
 const card: React.CSSProperties = {
-  background: '#fff', borderRadius: 16, border: '1px solid #eaeef4',
-  boxShadow: '0 12px 30px rgba(15,23,42,0.07), 0 3px 9px rgba(15,23,42,0.05)', overflow: 'hidden',
+  background: '#fff', borderRadius: 16, border: '1px solid #E6E3DC', overflow: 'hidden',
 };
 
 function Notice({ icon, bg, border, color, children }: {
@@ -166,25 +197,23 @@ function Notice({ icon, bg, border, color, children }: {
   );
 }
 
-function StatCard({ icon, tint, label, value, loading, onClick }: {
-  icon: React.ReactNode; tint: string; label: string; value: number; loading: boolean; onClick?: () => void;
+function KpiTile({ dot, label, value, sub, loading, onClick }: {
+  dot: string; label: string; value: number; sub: string; loading: boolean; onClick?: () => void;
 }) {
   return (
     <div
       className={onClick ? 'lift' : undefined}
       onClick={onClick}
-      style={{ ...card, padding: '16px 18px', cursor: onClick ? 'pointer' : 'default' }}
+      style={{ ...card, padding: '20px 22px', cursor: onClick ? 'pointer' : 'default' }}
     >
-      <span style={{
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: 34, height: 34, borderRadius: 9, background: `${tint}18`, color: tint, marginBottom: 10,
-      }}>
-        {icon}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+        <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.11em', textTransform: 'uppercase', color: '#8A857B' }}>{label}</span>
       </span>
-      <p style={{ fontSize: 24, fontWeight: 800, color: '#0b1220', letterSpacing: -0.6, lineHeight: 1 }}>
+      <p style={{ fontSize: 34, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1, marginTop: 14, color: '#17181A' }}>
         {loading ? '—' : value.toLocaleString()}
       </p>
-      <p style={{ fontSize: 12, color: '#64748b', marginTop: 5, fontWeight: 600 }}>{label}</p>
+      <p style={{ fontSize: 12.5, color: '#8A857B', marginTop: 8 }}>{sub}</p>
     </div>
   );
 }
@@ -201,8 +230,8 @@ function ActionCard({ icon, iconBg, title, text, onClick }: {
         {icon}
       </span>
       <span>
-        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>{title}</span>
-        <span style={{ display: 'block', fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 1.5 }}>{text}</span>
+        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: '#17181A' }}>{title}</span>
+        <span style={{ display: 'block', fontSize: 12, color: '#8A857B', marginTop: 3, lineHeight: 1.5 }}>{text}</span>
       </span>
     </button>
   );

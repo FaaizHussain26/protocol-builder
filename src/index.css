@@ -1,6 +1,17 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
+  /* EsourcEngine palette (design canvas) */
+  --canvas: #F7F6F3;
+  --ee-border: #E6E3DC;
+  --ee-border-strong: #DCD8CF;
+  --ee-ink: #17181A;
+  --ee-accent: #BE4A46;
+  --ee-accent-hover: #F08080;
+  --font-sans: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
   --ink-900: #0b1220;
   --ink-800: #101a2e;
   --ink-700: #1e293b;
@@ -31,16 +42,12 @@ html {
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  color: var(--ink-700);
+  font-family: var(--font-sans);
+  color: var(--ee-ink);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  /* Soft, brand-tinted depth instead of a flat grey fill. */
-  background:
-    radial-gradient(1100px 620px at 88% -12%, #e9eefb 0%, rgba(233, 238, 251, 0) 55%),
-    radial-gradient(820px 520px at -6% 2%, #fdeadb 0%, rgba(253, 234, 219, 0) 52%),
-    linear-gradient(180deg, #f7f9fd 0%, #eef1f7 100%);
-  background-attachment: fixed;
+  letter-spacing: -0.01em;
+  background: var(--canvas);
   min-height: 100vh;
 }
 
@@ -50,7 +57,7 @@ body {
 }
 
 ::selection {
-  background: rgba(242, 106, 27, 0.18);
+  background: #FBDCDC;
 }
 
 /* Quieter, modern scrollbars. */
@@ -74,7 +81,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--brand);
+  outline: 2px solid var(--ee-accent);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -86,6 +93,11 @@ button {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 @keyframes floatIn {
@@ -113,6 +125,11 @@ button {
 .form-tab:hover { background: #eef2f8 !important; }
 .lift { transition: transform 0.12s ease, box-shadow 0.2s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
 .lift:hover { transform: translateY(-1px); }
+
+.ee-nav-item:not(:disabled):hover {
+  background: #2A1A18 !important;
+  color: #E7E4DE !important;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .float-in, .anim-page, .anim-form, .anim-row { animation: none; }

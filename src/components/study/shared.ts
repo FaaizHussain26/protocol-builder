@@ -3,19 +3,19 @@ import type { ReviewStatus, StudyField, StudyForm } from '../../types/study';
 
 export const visitCtlBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  width: 32, height: 32, borderRadius: 8, border: '1px solid #e2e8f0',
-  background: '#fff', color: '#64748b', cursor: 'pointer', flexShrink: 0,
+  width: 32, height: 32, borderRadius: 8, border: '1px solid #E6E3DC',
+  background: '#fff', color: '#6E6A62', cursor: 'pointer', flexShrink: 0,
 };
 
 export const reorderBtn = (disabled: boolean): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  width: 20, height: 16, borderRadius: 5, border: '1px solid #e2e8f0',
-  background: '#fff', color: disabled ? '#cbd5e1' : '#64748b',
+  width: 20, height: 16, borderRadius: 5, border: '1px solid #E6E3DC',
+  background: '#fff', color: disabled ? '#DCD8CF' : '#6E6A62',
   cursor: disabled ? 'default' : 'pointer', padding: 0, flexShrink: 0,
 });
 
 // RAG palette shared by field cards, form list dots, and filter chips.
-export const RAG: Record<ReviewStatus, string> = { accepted: '#22c55e', pending: '#f59e0b', rejected: '#ef4444' };
+export const RAG: Record<ReviewStatus, string> = { accepted: '#2F6B4F', pending: '#C9963D', rejected: '#A02D24' };
 
 // A form's aggregate review status: red if anything is rejected, green when
 // every field is approved, amber while anything is still pending.

@@ -3,9 +3,9 @@ import type { IntelligenceFinding, FindingSeverity } from '../types/study';
 import { ConfidenceBadge, Pill } from './ui';
 
 const SEVERITY: Record<FindingSeverity, { bar: string; bg: string; fg: string; icon: React.ReactNode; label: string }> = {
-  blocker: { bar: '#dc2626', bg: '#fef2f2', fg: '#b91c1c', icon: <AlertOctagon size={16} color="#dc2626" />, label: 'Blocker' },
-  warning: { bar: '#f59e0b', bg: '#fffbeb', fg: '#b45309', icon: <AlertTriangle size={16} color="#f59e0b" />, label: 'Warning' },
-  info: { bar: '#3b82f6', bg: '#eff6ff', fg: '#1d4ed8', icon: <Info size={16} color="#3b82f6" />, label: 'Info' },
+  blocker: { bar: '#A02D24', bg: '#FBEDEB', fg: '#973C38', icon: <AlertOctagon size={16} color="#A02D24" />, label: 'Blocker' },
+  warning: { bar: '#C9963D', bg: '#FBF6EC', fg: '#8A6D3F', icon: <AlertTriangle size={16} color="#C9963D" />, label: 'Warning' },
+  info: { bar: '#BE4A46', bg: '#FDF1F1', fg: '#9C3733', icon: <Info size={16} color="#BE4A46" />, label: 'Info' },
 };
 
 export default function FindingsPanel({ findings, onResolve }: {
@@ -16,7 +16,7 @@ export default function FindingsPanel({ findings, onResolve }: {
   const openBlockers = open.filter(f => f.severity === 'blocker').length;
 
   if (findings.length === 0) {
-    return <div style={{ padding: '60px 28px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
+    return <div style={{ padding: '60px 28px', textAlign: 'center', color: '#8A857B', fontSize: 14 }}>
       No intelligence findings were surfaced.
     </div>;
   }
@@ -33,23 +33,23 @@ export default function FindingsPanel({ findings, onResolve }: {
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18,
         padding: '12px 16px', borderRadius: 12,
-        background: openBlockers > 0 ? '#fef2f2' : '#f0fdf4',
-        border: `1px solid ${openBlockers > 0 ? '#fecaca' : '#bbf7d0'}`,
+        background: openBlockers > 0 ? '#FBEDEB' : '#EAF2ED',
+        border: `1px solid ${openBlockers > 0 ? '#F1CFCE' : '#D3E4D9'}`,
       }}>
         {openBlockers > 0
-          ? <AlertOctagon size={18} color="#dc2626" />
-          : <CheckCircle2 size={18} color="#16a34a" />}
-        <span style={{ fontSize: 13.5, fontWeight: 600, color: openBlockers > 0 ? '#b91c1c' : '#15803d' }}>
+          ? <AlertOctagon size={18} color="#A02D24" />
+          : <CheckCircle2 size={18} color="#2F6B4F" />}
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: openBlockers > 0 ? '#973C38' : '#2F6B4F' }}>
           {openBlockers > 0
             ? `${openBlockers} blocking issue${openBlockers !== 1 ? 's' : ''} must be resolved before the build can be approved.`
             : 'No open blockers — build can proceed to approval.'}
         </span>
-        <span style={{ marginLeft: 'auto', fontSize: 12.5, color: '#64748b' }}>
+        <span style={{ marginLeft: 'auto', fontSize: 12.5, color: '#6E6A62' }}>
           {open.length} open · {findings.length - open.length} resolved
         </span>
       </div>
 
-      <p style={{ fontSize: 13.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>
+      <p style={{ fontSize: 13.5, color: '#6E6A62', marginBottom: 16, lineHeight: 1.5 }}>
         Protocol-aware findings surfaced across the source documents. Each shows what it is, where it came
         from, a confidence level, and a suggested action.
       </p>
@@ -59,31 +59,31 @@ export default function FindingsPanel({ findings, onResolve }: {
           const s = SEVERITY[f.severity];
           return (
             <div key={f.id} style={{
-              border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden',
-              borderLeft: `3px solid ${f.resolved ? '#cbd5e1' : s.bar}`,
+              border: '1px solid #E6E3DC', borderRadius: 12, overflow: 'hidden',
+              borderLeft: `3px solid ${f.resolved ? '#DCD8CF' : s.bar}`,
               opacity: f.resolved ? 0.62 : 1,
             }}>
-              <div style={{ padding: '14px 16px', background: f.resolved ? '#f8fafc' : s.bg }}>
+              <div style={{ padding: '14px 16px', background: f.resolved ? '#FBFAF7' : s.bg }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                   <span style={{ flexShrink: 0, marginTop: 1 }}>{s.icon}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <h3 style={{ fontSize: 14.5, fontWeight: 700, color: '#1e293b' }}>{f.title}</h3>
+                      <h3 style={{ fontSize: 14.5, fontWeight: 700, color: '#17181A' }}>{f.title}</h3>
                       <Pill bg="#fff" color={s.fg}>{s.label}</Pill>
                       <ConfidenceBadge level={f.confidence} compact />
                       {f.suggestedAction === 'block'
-                        ? <Pill bg="#fee2e2" color="#b91c1c">Action: block</Pill>
-                        : <Pill bg="#eff6ff" color="#2563eb">Action: review</Pill>}
+                        ? <Pill bg="#FBEDEB" color="#973C38">Action: block</Pill>
+                        : <Pill bg="#FDF1F1" color="#BE4A46">Action: review</Pill>}
                     </div>
-                    <p style={{ fontSize: 13, color: '#475569', marginTop: 6, lineHeight: 1.5 }}>{f.description}</p>
-                    <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 6 }}>Source: {f.source}</p>
+                    <p style={{ fontSize: 13, color: '#5C584F', marginTop: 6, lineHeight: 1.5 }}>{f.description}</p>
+                    <p style={{ fontSize: 11.5, color: '#8A857B', marginTop: 6 }}>Source: {f.source}</p>
                   </div>
                   <button onClick={() => onResolve(f.id, !f.resolved)} style={{
                     flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
                     padding: '7px 12px', borderRadius: 8, cursor: 'pointer',
-                    border: `1px solid ${f.resolved ? '#e2e8f0' : '#cbd5e1'}`,
-                    background: f.resolved ? '#fff' : '#1e293b',
-                    color: f.resolved ? '#64748b' : '#fff',
+                    border: `1px solid ${f.resolved ? '#E6E3DC' : '#DCD8CF'}`,
+                    background: f.resolved ? '#fff' : '#17181A',
+                    color: f.resolved ? '#6E6A62' : '#fff',
                     fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
                   }}>
                     {f.resolved ? <><RotateCcw size={12} /> Reopen</> : <><CheckCircle2 size={12} /> Resolve</>}

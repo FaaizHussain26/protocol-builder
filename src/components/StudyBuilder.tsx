@@ -16,7 +16,7 @@ import FindingsPanel from './FindingsPanel';
 import ExportPanel from './ExportPanel';
 import FieldEditorDrawer from './FieldEditorDrawer';
 import { visitCtlBtn, RAG, formReviewStatus, groupFieldsBySection } from './study/shared';
-import { CounterChip, FormBlock, VisitPicker, FoldersPanel, SettingsPanel } from './study/components';
+import { FormBlock, VisitPicker, FoldersPanel, SettingsPanel } from './study/components';
 
 // Identifies which field (or new field) the editor drawer is targeting.
 interface EditTarget {
@@ -542,58 +542,57 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
     <div style={{ maxWidth: '100%', margin: '0 auto' }}>
       {/* Study header */}
       <div style={{
-        background:
-          'radial-gradient(640px 300px at 93% -35%, rgba(242,106,27,0.32) 0%, rgba(242,106,27,0) 62%),' +
-          'linear-gradient(135deg, #0b1220 0%, #15233c 55%, #25364f 100%)',
-        borderRadius: '22px 22px 0 0', padding: '28px 32px', color: '#fff',
+        background: '#17100F',
+        borderRadius: '22px 22px 0 0', padding: '26px 34px 22px', color: '#fff',
         position: 'relative', overflow: 'hidden',
-        boxShadow: '0 1px 0 rgba(255,255,255,0.08) inset',
       }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <FlaskConical size={16} color="#f26a1b" />
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#f26a1b', letterSpacing: 1, textTransform: 'uppercase' }}>
-                Structured eSource Build
-              </span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: '#A6918E', letterSpacing: '0.04em' }}>
+              <FlaskConical size={13} color="#BE4A46" />
+              {[study.protocolNumber, study.phase?.toUpperCase(), study.sponsor?.toUpperCase()].filter(Boolean).map((part, i) => (
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {i > 0 && <span style={{ color: '#4E3835', marginRight: 10 }}>/</span>}
+                  <span>{part}</span>
+                </span>
+              ))}
             </div>
-            <h1 style={{ fontSize: 23, fontWeight: 700, marginBottom: 8, letterSpacing: -0.4 }}>{study.studyTitle}</h1>
-            <p style={{ fontSize: 13.5, opacity: 0.8, lineHeight: 1.5, maxWidth: 680 }}>{study.studyDescription}</p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-              {study.protocolNumber && <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">Protocol {study.protocolNumber}</Pill>}
-              {study.phase && <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">{study.phase}</Pill>}
-              {study.indication && <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">{study.indication}</Pill>}
-              {study.sponsor && <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">{study.sponsor}</Pill>}
-              <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">{study.documents.length} source doc{study.documents.length !== 1 ? 's' : ''}</Pill>
+            <h1 style={{ margin: '10px 0 0', fontSize: 23, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.3 }}>{study.studyTitle}</h1>
+            <p style={{ fontSize: 13, color: '#C4B6B3', marginTop: 8, lineHeight: 1.5, maxWidth: 680 }}>{study.studyDescription}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12, fontSize: 12.5, color: '#A6918E', flexWrap: 'wrap', rowGap: 6 }}>
+              <span>{stats.total} field{stats.total !== 1 ? 's' : ''}</span>
+              <span style={{ color: '#46312E' }}>·</span>
+              <span>{study.documents.length} source doc{study.documents.length !== 1 ? 's' : ''}</span>
               {study.createdAt && (
-                <Pill bg="rgba(255,255,255,0.12)" color="#e2e8f0">
-                  Created {new Date(study.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </Pill>
+                <>
+                  <span style={{ color: '#46312E' }}>·</span>
+                  <span>Created {new Date(study.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                </>
               )}
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
             {(() => {
               const msg = saveMsg ?? autoMsg;
               if (!msg) return null;
-              const color = /fail/i.test(msg) ? '#fca5a5' : msg === 'Saving…' ? '#cbd5e1' : '#4ade80';
-              return <span style={{ fontSize: 12, fontWeight: 600, color }}>{msg}</span>;
+              const color = /fail/i.test(msg) ? '#E0716D' : msg === 'Saving…' ? '#CBBAB8' : '#8FC7A8';
+              return <span style={{ fontSize: 12, fontWeight: 500, color, marginRight: 4 }}>{msg}</span>;
             })()}
             <button onClick={approveAll} disabled={stats.pending === 0 && stats.rejected === 0} className="lift" style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-              borderRadius: 9, border: '1px solid rgba(74,222,128,0.45)',
-              background: 'rgba(34,197,94,0.18)', color: '#4ade80',
+              borderRadius: 9, border: '1px solid #2F6B4F',
+              background: '#1B3A2C', color: '#8FC7A8',
               cursor: stats.pending === 0 && stats.rejected === 0 ? 'default' : 'pointer',
               opacity: stats.pending === 0 && stats.rejected === 0 ? 0.5 : 1,
-              fontSize: 12.5, fontWeight: 600,
+              fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap',
             }}>
               <Check size={13} /> Approve all
             </button>
             <button onClick={() => handleSave('draft')} disabled={saving !== null} className="lift" style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-              borderRadius: 9, border: '1px solid rgba(251,191,36,0.5)',
-              background: 'rgba(245,158,11,0.22)', color: '#fbbf24',
-              cursor: saving ? 'wait' : 'pointer', fontSize: 12.5, fontWeight: 600,
+              borderRadius: 9, border: '1px solid #35211F', color: '#CBBAB8',
+              background: 'transparent',
+              cursor: saving ? 'wait' : 'pointer', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap',
             }}>
               <Pencil size={13} /> {saving === 'draft' ? 'Saving…' : 'Save draft'}
             </button>
@@ -603,40 +602,59 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
               className="lift"
               title={fullyApproved ? 'Save the reviewed eSource' : stats.accepted === 0 ? 'Accept at least one field first' : `Review every field first (${stats.pending} pending)`}
               style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-                borderRadius: 9, border: '1px solid rgba(242,106,27,0.5)',
-                background: fullyApproved ? 'rgba(242,106,27,0.9)' : 'rgba(148,163,184,0.25)',
-                color: fullyApproved ? '#fff' : 'rgba(226,232,240,0.55)',
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 15px',
+                borderRadius: 9, border: 'none',
+                background: fullyApproved ? '#BE4A46' : '#3A2A28',
+                color: fullyApproved ? '#fff' : '#7A6663',
                 cursor: saving ? 'wait' : fullyApproved ? 'pointer' : 'not-allowed',
-                fontSize: 12.5, fontWeight: 600,
+                fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap',
               }}
             >
               <Save size={13} /> {saving === 'final' ? 'Saving…' : 'Save to E-Sources'}
             </button>
             <button onClick={onReset} className="lift" style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-              borderRadius: 9, border: '1px solid rgba(255,255,255,0.2)',
-              background: 'rgba(255,255,255,0.06)', color: '#e2e8f0',
-              cursor: 'pointer', fontSize: 12.5, fontWeight: 500,
+              borderRadius: 9, border: '1px solid #35211F',
+              background: 'transparent', color: '#CBBAB8',
+              cursor: 'pointer', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap',
             }}>
               <RotateCcw size={13} /> New Build
             </button>
           </div>
         </div>
 
-        {/* Review counter strip */}
-        <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
-          <CounterChip label="Fields" value={stats.total} color="#e2e8f0" />
-          <CounterChip label="Approved" value={stats.accepted} color="#4ade80" />
-          <CounterChip label="Flagged for review" value={stats.flagged} color="#fbbf24" />
-          <CounterChip label="Pending" value={stats.pending} color="#cbd5e1" />
-          {stats.openBlockers > 0 && <CounterChip label="Open blockers" value={stats.openBlockers} color="#f87171" />}
-        </div>
+        {/* Segmented review-status bar */}
+        {stats.total > 0 && (() => {
+          const segments = [
+            { label: 'approved', n: stats.accepted, color: '#2F6B4F' },
+            { label: 'pending', n: stats.pending, color: '#4B5563' },
+            { label: 'flagged', n: stats.flagged, color: '#E0716D' },
+            { label: 'blockers', n: stats.openBlockers, color: '#A02D24' },
+          ].filter((s) => s.n > 0);
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 22, marginTop: 20, paddingTop: 18, borderTop: '1px solid #281A18', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 160, display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden', background: '#261917' }}>
+                {segments.map((s) => (
+                  <div key={s.label} style={{ height: '100%', background: s.color, width: `${(s.n / stats.total) * 100}%` }} />
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+                {segments.map((s) => (
+                  <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.color }} />
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, fontWeight: 500 }}>{s.n}</span>
+                    <span style={{ fontSize: 12, color: '#A6918E' }}>{s.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Tab nav — hidden when the app sidebar controls the section */}
       <div style={{
-        background: '#fff', borderBottom: '1px solid #e2e8f0',
+        background: '#fff', borderBottom: '1px solid #E6E3DC',
         display: controlledTab !== undefined ? 'none' : 'flex', padding: '0 20px', gap: 4,
       }}>
         {TABS.map(t => (
@@ -644,16 +662,16 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
             display: 'flex', alignItems: 'center', gap: 7,
             padding: '14px 16px', border: 'none', background: 'none', cursor: 'pointer',
             fontSize: 13.5, fontWeight: 600,
-            color: tab === t.id ? '#2563eb' : '#64748b',
-            borderBottom: `2px solid ${tab === t.id ? '#2563eb' : 'transparent'}`,
+            color: tab === t.id ? '#BE4A46' : '#6E6A62',
+            borderBottom: `2px solid ${tab === t.id ? '#BE4A46' : 'transparent'}`,
             marginBottom: -1,
           }}>
             {t.icon}{t.label}
             {t.badge ? (
               <span style={{
                 fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 10,
-                background: tab === t.id ? '#dbeafe' : '#f1f5f9',
-                color: tab === t.id ? '#2563eb' : '#94a3b8',
+                background: tab === t.id ? '#FDF1F1' : '#F1EFEA',
+                color: tab === t.id ? '#BE4A46' : '#8A857B',
               }}>{t.badge}</span>
             ) : null}
           </button>
@@ -663,17 +681,17 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
       {/* Body — keyed by tab so each page switch replays the enter animation */}
       <div key={tab} className="anim-page" style={{
         background: '#fff', borderRadius: '0 0 22px 22px',
-        boxShadow: '0 18px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.06)',
-        border: '1px solid #eaeef4', borderTop: 'none', minHeight: 420,
+        boxShadow: '0 18px 40px rgba(23,24,26,0.10), 0 4px 12px rgba(23,24,26,0.06)',
+        border: '1px solid #E6E3DC', borderTop: 'none', minHeight: 420,
       }}>
         {tab === 'build' && (
           <div>
             {/* Visit selector — visits live in a dropdown, not the side menu */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-              padding: '16px 28px', borderBottom: '1px solid #e2e8f0', background: '#fafbfc',
+              padding: '16px 28px', borderBottom: '1px solid #E6E3DC', background: '#FBFAF7',
             }}>
-              <label htmlFor="visit-select" style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              <label htmlFor="visit-select" style={{ fontSize: 11, fontWeight: 700, color: '#8A857B', letterSpacing: 0.5, textTransform: 'uppercase' }}>
                 Visit
               </label>
               <VisitPicker
@@ -685,16 +703,16 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
               {activeVisit && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Pill>{activeVisit.kind === 'log' ? 'Continuous log' : 'Scheduled visit'}</Pill>
-                  {activeVisit.window && <Pill bg="#eff6ff" color="#2563eb">Window {activeVisit.window}</Pill>}
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                  {activeVisit.window && <Pill bg="#FDF1F1" color="#BE4A46">Window {activeVisit.window}</Pill>}
+                  <span style={{ fontSize: 12, color: '#8A857B' }}>
                     {activeVisit.forms.length} form{activeVisit.forms.length !== 1 ? 's' : ''} · {activeVisit.forms.reduce((a, f) => a + f.fields.length, 0)} fields
                   </span>
                 </div>
               )}
               {/* RAG review filter — narrows the forms list and visible fields */}
-              <div style={{ display: 'flex', gap: 3, alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 9, padding: 3 }}>
+              <div style={{ display: 'flex', gap: 3, alignItems: 'center', background: '#fff', border: '1px solid #E6E3DC', borderRadius: 9, padding: 3 }}>
                 {([
-                  { key: 'all', label: 'All', count: stats.total, color: '#475569' },
+                  { key: 'all', label: 'All', count: stats.total, color: '#5C584F' },
                   { key: 'accepted', label: 'Approved', count: stats.accepted, color: RAG.accepted },
                   { key: 'pending', label: 'Pending', count: stats.pending, color: RAG.pending },
                   { key: 'rejected', label: 'Rejected', count: stats.rejected, color: RAG.rejected },
@@ -705,7 +723,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 9px',
                       borderRadius: 7, border: 'none', cursor: 'pointer',
                       background: active ? `${f.color}1a` : 'transparent',
-                      color: active ? f.color : '#94a3b8', fontSize: 11.5, fontWeight: 700,
+                      color: active ? f.color : '#8A857B', fontSize: 11.5, fontWeight: 700,
                     }}>
                       {f.key !== 'all' && <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.color }} />}
                       {f.label} {f.count}
@@ -725,7 +743,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                     }} style={visitCtlBtn}><Trash2 size={13} /></button>
                   </>
                 )}
-                <button className="lift" onClick={addVisit} style={{ ...visitCtlBtn, color: '#2563eb', borderColor: '#bfdbfe', width: 'auto', padding: '0 11px', gap: 6, fontWeight: 600, fontSize: 12.5 }}>
+                <button className="lift" onClick={addVisit} style={{ ...visitCtlBtn, color: '#BE4A46', borderColor: '#F1CFCE', width: 'auto', padding: '0 11px', gap: 6, fontWeight: 600, fontSize: 12.5 }}>
                   <Plus size={14} /> Visit
                 </button>
               </div>
@@ -734,11 +752,11 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
             <div style={{ display: 'flex', minHeight: 420 }}>
               {/* Forms side menu — the selected visit's form titles */}
               <div style={{
-                width: 248, flexShrink: 0, borderRight: '1px solid #e2e8f0',
-                padding: '16px 12px', background: '#fafbfc',
+                width: 248, flexShrink: 0, borderRight: '1px solid #E6E3DC',
+                padding: '16px 12px', background: '#FBFAF7',
                 maxHeight: 'calc(100vh - 120px)', overflowY: 'auto',
               }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase', padding: '0 8px', marginBottom: 10 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#8A857B', letterSpacing: 0.5, textTransform: 'uppercase', padding: '0 8px', marginBottom: 10 }}>
                   Forms
                 </p>
                 {(() => {
@@ -749,21 +767,21 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                     const status = formReviewStatus(f);
                     const approvedCount = f.fields.filter(x => x.reviewStatus === 'accepted').length;
                     return (
-                      <div style={{ display: 'flex', alignItems: 'stretch', gap: 2, marginBottom: 4, borderRadius: 9, background: active ? '#eff6ff' : 'transparent' }}>
+                      <div style={{ display: 'flex', alignItems: 'stretch', gap: 2, marginBottom: 4, borderRadius: 9, background: active ? '#FDF1F1' : 'transparent' }}>
                         {handle}
                         <button className="form-tab" onClick={() => setActiveFormId(f.id)} style={{
                           flex: 1, minWidth: 0, textAlign: 'left', padding: '10px 10px',
                           borderRadius: 9, border: 'none', cursor: 'pointer', background: 'transparent',
                           display: 'flex', alignItems: 'center', gap: 9,
                         }}>
-                          <span style={{ color: active ? '#2563eb' : '#94a3b8', flexShrink: 0 }}>
+                          <span style={{ color: active ? '#BE4A46' : '#8A857B', flexShrink: 0 }}>
                             {f.appliedTemplate ? <CircleDot size={15} /> : <FileText size={15} />}
                           </span>
                           <span style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: active ? '#2563eb' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: active ? '#BE4A46' : '#17181A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {f.name}
                             </span>
-                            <span style={{ display: 'block', fontSize: 11, color: status === 'accepted' ? '#15803d' : status === 'rejected' ? '#b91c1c' : '#b45309' }}>
+                            <span style={{ display: 'block', fontSize: 11, color: status === 'accepted' ? '#2F6B4F' : status === 'rejected' ? '#973C38' : '#8A6D3F' }}>
                               {approvedCount}/{f.fields.length} approved
                             </span>
                           </span>
@@ -781,7 +799,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                           {({ setNodeRef, style, handleProps }) => (
                             <div ref={setNodeRef} style={style}>
                               {row(f, (
-                                <span {...handleProps} title="Drag to reorder" style={{ display: 'flex', alignItems: 'center', color: '#cbd5e1', cursor: 'grab', paddingLeft: 3, touchAction: 'none' }}>
+                                <span {...handleProps} title="Drag to reorder" style={{ display: 'flex', alignItems: 'center', color: '#DCD8CF', cursor: 'grab', paddingLeft: 3, touchAction: 'none' }}>
                                   <GripVertical size={13} />
                                 </span>
                               ))}
@@ -793,7 +811,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                   );
                 })()}
                 {reviewFilter !== 'all' && (activeVisit?.forms ?? []).every(f => !f.fields.some(x => x.reviewStatus === reviewFilter)) && (
-                  <p style={{ fontSize: 12, color: '#94a3b8', padding: '4px 8px', fontStyle: 'italic' }}>
+                  <p style={{ fontSize: 12, color: '#8A857B', padding: '4px 8px', fontStyle: 'italic' }}>
                     No forms with {reviewFilter === 'accepted' ? 'approved' : reviewFilter} fields in this visit.
                   </p>
                 )}
@@ -801,8 +819,8 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                   <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <button className="lift" onClick={() => addForm(activeVisit.id)} style={{
                       width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                      padding: '9px', borderRadius: 9, border: '1px dashed #cbd5e1',
-                      background: '#fff', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                      padding: '9px', borderRadius: 9, border: '1px dashed #DCD8CF',
+                      background: '#fff', color: '#BE4A46', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
                     }}>
                       <Plus size={14} /> Add blank form
                     </button>
@@ -810,8 +828,8 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       value=""
                       onChange={e => { if (e.target.value && activeVisit) { addForm(activeVisit.id, e.target.value); e.currentTarget.value = ''; } }}
                       style={{
-                        width: '100%', padding: '9px', borderRadius: 9, border: '1px solid #e2e8f0',
-                        background: '#fff', fontSize: 12.5, color: '#475569', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                        width: '100%', padding: '9px', borderRadius: 9, border: '1px solid #E6E3DC',
+                        background: '#fff', fontSize: 12.5, color: '#5C584F', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
                       }}
                     >
                       <option value="">+ Add standard form…</option>
@@ -822,8 +840,8 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                         value=""
                         onChange={e => { if (e.target.value && activeVisit) { const [sv, sf] = e.target.value.split('::'); copyFormFrom(sv, sf, activeVisit.id); e.currentTarget.value = ''; } }}
                         style={{
-                          width: '100%', padding: '9px', borderRadius: 9, border: '1px solid #e2e8f0',
-                          background: '#fff', fontSize: 12.5, color: '#475569', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                          width: '100%', padding: '9px', borderRadius: 9, border: '1px solid #E6E3DC',
+                          background: '#fff', fontSize: 12.5, color: '#5C584F', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
                         }}
                       >
                         <option value="">+ Copy form from another visit…</option>
@@ -837,8 +855,8 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                     {/screen/i.test(activeVisit.name) && (
                       <button className="lift" onClick={() => sortFormsStandard(activeVisit.id)} style={{
                         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                        padding: '8px', borderRadius: 9, border: '1px solid #e2e8f0',
-                        background: '#fafbfc', color: '#64748b', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        padding: '8px', borderRadius: 9, border: '1px solid #E6E3DC',
+                        background: '#FBFAF7', color: '#6E6A62', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                       }}>
                         <ListChecks size={13} /> Sort to standard order
                       </button>
@@ -878,7 +896,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
                       showFieldTypeBadge={study.showFieldTypeBadge !== false}
                     />
                   ) : (
-                    <p style={{ color: '#94a3b8', fontSize: 13 }}>This visit has no forms yet. Use “Add form” to create one.</p>
+                    <p style={{ color: '#8A857B', fontSize: 13 }}>This visit has no forms yet. Use “Add form” to create one.</p>
                   )}
                 </div>
               </div>

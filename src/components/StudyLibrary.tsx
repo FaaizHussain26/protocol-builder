@@ -82,33 +82,33 @@ export default function StudyLibrary({ onOpen, mode }: StudyLibraryProps) {
       ? `${items.length ? `${items.length} · ` : ''}partially reviewed — approve every field to promote`
       : `${items.length ? `${items.length} · ` : ''}deleted studies — restore or remove permanently`;
   const HeadIcon = mode === 'final' ? FolderOpen : mode === 'drafts' ? PenLine : Trash2;
-  const headColor = mode === 'final' ? '#2563eb' : mode === 'drafts' ? '#f59e0b' : '#ef4444';
+  const headColor = mode === 'final' ? '#BE4A46' : mode === 'drafts' ? '#C9963D' : '#A02D24';
 
   return (
     <div className="anim-form" style={{
       maxWidth: 860, margin: '0 auto', background: '#fff', borderRadius: 18,
-      boxShadow: '0 18px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.06)', border: '1px solid #eaeef4',
+      boxShadow: '0 18px 40px rgba(23,24,26,0.10), 0 4px 12px rgba(23,24,26,0.06)', border: '1px solid #E6E3DC',
       overflow: 'hidden',
     }}>
-      <div style={{ padding: '18px 22px', borderBottom: '1px solid #eef2f7', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ padding: '18px 22px', borderBottom: '1px solid #EFECE5', display: 'flex', alignItems: 'center', gap: 10 }}>
         <HeadIcon size={18} color={headColor} />
         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>{heading}</h2>
-        <span style={{ fontSize: 12, color: '#94a3b8' }}>{sub}</span>
+        <span style={{ fontSize: 12, color: '#8A857B' }}>{sub}</span>
       </div>
 
       <div style={{ padding: '14px 22px 20px' }}>
         {error && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 10, background: '#fef2f2', border: '1px solid #fecaca', marginBottom: 12 }}>
-            <AlertCircle size={15} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
-            <p style={{ color: '#dc2626', fontSize: 13 }}>{error}</p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 10, background: '#FBEDEB', border: '1px solid #F1CFCE', marginBottom: 12 }}>
+            <AlertCircle size={15} color="#A02D24" style={{ flexShrink: 0, marginTop: 1 }} />
+            <p style={{ color: '#A02D24', fontSize: 13 }}>{error}</p>
           </div>
         )}
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 14, padding: '24px 0', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#6E6A62', fontSize: 14, padding: '24px 0', justifyContent: 'center' }}>
             <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading…
           </div>
         ) : items.length === 0 ? (
-          <p style={{ color: '#94a3b8', fontSize: 14, textAlign: 'center', padding: '24px 0' }}>
+          <p style={{ color: '#8A857B', fontSize: 14, textAlign: 'center', padding: '24px 0' }}>
             {mode === 'final'
               ? 'No fully-approved eSources yet. Approve every field in a draft, then “Save to E-Sources”.'
               : mode === 'drafts'
@@ -123,25 +123,25 @@ export default function StudyLibrary({ onOpen, mode }: StudyLibraryProps) {
               return (
               <div key={s.id} style={{
                 display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-                border: '1px solid #e8edf4', borderRadius: 12, background: '#fafbfc',
+                border: '1px solid #E6E3DC', borderRadius: 12, background: '#FBFAF7',
               }}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: mode === 'final' ? '#f0fdf4' : mode === 'trash' ? '#fef2f2' : '#eef2fb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {mode === 'final' ? <CheckCircle2 size={18} color="#16a34a" /> : mode === 'trash' ? <Trash2 size={18} color="#ef4444" /> : <Layers size={18} color="#2563eb" />}
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: mode === 'final' ? '#EAF2ED' : mode === 'trash' ? '#FBEDEB' : '#FDF1F1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {mode === 'final' ? <CheckCircle2 size={18} color="#2F6B4F" /> : mode === 'trash' ? <Trash2 size={18} color="#A02D24" /> : <Layers size={18} color="#BE4A46" />}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.studyTitle}</p>
-                  <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+                  <p style={{ fontSize: 13.5, fontWeight: 700, color: '#17181A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.studyTitle}</p>
+                  <p style={{ fontSize: 11.5, color: '#8A857B', marginTop: 2 }}>
                     {[s.protocolNumber, s.phase, `${s.visitCount} visits`, `${s.fieldCount} fields`, s.createdAt && `Created ${fmtDate(s.createdAt)}`].filter(Boolean).join(' · ')}
                   </p>
                   {mode === 'drafts' && s.fieldCount > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                      <div style={{ flex: 1, maxWidth: 220, height: 5, borderRadius: 4, background: '#e2e8f0' }}>
+                      <div style={{ flex: 1, maxWidth: 220, height: 5, borderRadius: 4, background: '#E6E3DC' }}>
                         <div style={{
                           width: `${pct}%`, height: '100%', borderRadius: 4,
-                          background: pct === 100 ? '#22c55e' : pct > 0 ? '#f59e0b' : '#ef4444',
+                          background: pct === 100 ? '#2F6B4F' : pct > 0 ? '#C9963D' : '#A02D24',
                         }} />
                       </div>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: pct === 100 ? '#15803d' : '#b45309' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: pct === 100 ? '#2F6B4F' : '#8A6D3F' }}>
                         {approved}/{s.fieldCount} approved
                       </span>
                     </div>
@@ -149,15 +149,15 @@ export default function StudyLibrary({ onOpen, mode }: StudyLibraryProps) {
                 </div>
                 {mode === 'trash' ? (
                   <button className="lift" disabled={busyId === s.id} onClick={() => handleRestore(s.id)} style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 9, border: '1px solid #bbf7d0',
-                    background: '#f0fdf4', color: '#15803d', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 9, border: '1px solid #D3E4D9',
+                    background: '#EAF2ED', color: '#2F6B4F', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
                   }}>
                     <RotateCcw size={13} /> Restore
                   </button>
                 ) : (
                   <button className="lift" disabled={busyId === s.id} onClick={() => handleOpen(s.id)} style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 9, border: '1px solid #bfdbfe',
-                    background: '#eff6ff', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 9, border: '1px solid #F1CFCE',
+                    background: '#FDF1F1', color: '#BE4A46', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
                   }}>
                     <FolderOpen size={13} /> Open
                   </button>
@@ -166,8 +166,8 @@ export default function StudyLibrary({ onOpen, mode }: StudyLibraryProps) {
                   aria-label={mode === 'trash' ? 'Delete permanently' : 'Move to Trash'}
                   title={mode === 'trash' ? 'Delete permanently' : 'Move to Trash'}
                   style={{
-                    background: mode === 'trash' ? '#fef2f2' : 'none', border: `1px solid ${mode === 'trash' ? '#fecaca' : '#e2e8f0'}`,
-                    borderRadius: 9, padding: 7, cursor: 'pointer', color: mode === 'trash' ? '#dc2626' : '#94a3b8', flexShrink: 0,
+                    background: mode === 'trash' ? '#FBEDEB' : 'none', border: `1px solid ${mode === 'trash' ? '#F1CFCE' : '#E6E3DC'}`,
+                    borderRadius: 9, padding: 7, cursor: 'pointer', color: mode === 'trash' ? '#A02D24' : '#8A857B', flexShrink: 0,
                   }}>
                   <Trash2 size={14} />
                 </button>

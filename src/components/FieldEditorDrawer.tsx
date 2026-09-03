@@ -15,9 +15,9 @@ interface FieldEditorDrawerProps {
 }
 
 const ALERT_LEVELS: { value: 'info' | 'warning' | 'critical'; label: string; color: string }[] = [
-  { value: 'info', label: 'Info', color: '#2563eb' },
-  { value: 'warning', label: 'Warning', color: '#b45309' },
-  { value: 'critical', label: 'Critical', color: '#b91c1c' },
+  { value: 'info', label: 'Info', color: '#BE4A46' },
+  { value: 'warning', label: 'Warning', color: '#8A6D3F' },
+  { value: 'critical', label: 'Critical', color: '#973C38' },
 ];
 
 const CONDITION_OPS: { value: FieldCondition['operator']; label: string; needsValue: boolean }[] = [
@@ -47,9 +47,9 @@ const FIELD_TYPES: { value: FieldType; label: string; desc: string }[] = [
 ];
 
 const CONFIDENCE_OPTS: { value: Confidence; label: string; color: string }[] = [
-  { value: 'high', label: 'High', color: '#16a34a' },
-  { value: 'medium', label: 'Medium', color: '#ca8a04' },
-  { value: 'low', label: 'Low (flag for review)', color: '#dc2626' },
+  { value: 'high', label: 'High', color: '#2F6B4F' },
+  { value: 'medium', label: 'Medium', color: '#A87D2E' },
+  { value: 'low', label: 'Low (flag for review)', color: '#A02D24' },
 ];
 
 const NEEDS_OPTIONS: FieldType[] = ['radio', 'checkbox', 'select', 'multiselect'];
@@ -109,21 +109,21 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
     onSave(cleaned);
   };
 
-  const labelStyle: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: '#334155', marginBottom: 7, display: 'block' };
+  const labelStyle: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: '#5C584F', marginBottom: 7, display: 'block' };
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid #e2e8f0',
-    background: '#fff', fontSize: 13.5, color: '#1e293b', outline: 'none', fontFamily: 'inherit',
+    width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid #E6E3DC',
+    background: '#fff', fontSize: 13.5, color: '#17181A', outline: 'none', fontFamily: 'inherit',
   };
   const addBlockBtn: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 8,
-    border: '1.5px dashed #cbd5e1', background: '#fff', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+    border: '1.5px dashed #DCD8CF', background: '#fff', color: '#BE4A46', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
   };
 
   return (
     <>
       {/* Backdrop */}
       <div onClick={onClose} style={{
-        position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', zIndex: 200,
+        position: 'fixed', inset: 0, background: 'rgba(23,24,26,0.4)', zIndex: 200,
         animation: 'fadeIn 0.15s ease',
       }} />
 
@@ -135,16 +135,16 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
       }}>
         {/* Header */}
         <div style={{
-          padding: '18px 22px', borderBottom: '1px solid #e2e8f0',
+          padding: '18px 22px', borderBottom: '1px solid #E6E3DC',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <div>
-            <p style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#BE4A46', letterSpacing: 0.5, textTransform: 'uppercase' }}>
               {isNew ? 'Add Field' : 'Edit Field'}
             </p>
-            <p style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginTop: 2 }}>Field properties</p>
+            <p style={{ fontSize: 15, fontWeight: 700, color: '#17100F', marginTop: 2 }}>Field properties</p>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A857B', padding: 4 }}>
             <X size={20} />
           </button>
         </div>
@@ -167,11 +167,11 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
                 return (
                   <button key={t.value} onClick={() => changeType(t.value)} style={{
                     textAlign: 'left', padding: '9px 11px', borderRadius: 9, cursor: 'pointer',
-                    border: `1.5px solid ${active ? '#2563eb' : '#e2e8f0'}`,
-                    background: active ? '#eff6ff' : '#fff',
+                    border: `1.5px solid ${active ? '#BE4A46' : '#E6E3DC'}`,
+                    background: active ? '#FDF1F1' : '#fff',
                   }}>
-                    <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: active ? '#2563eb' : '#1e293b' }}>{t.label}</span>
-                    <span style={{ display: 'block', fontSize: 10.5, color: '#94a3b8', marginTop: 1 }}>{t.desc}</span>
+                    <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: active ? '#BE4A46' : '#17181A' }}>{t.label}</span>
+                    <span style={{ display: 'block', fontSize: 10.5, color: '#8A857B', marginTop: 1 }}>{t.desc}</span>
                   </button>
                 );
               })}
@@ -185,14 +185,14 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {(draft.options ?? []).map((opt, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <GripVertical size={15} color="#cbd5e1" style={{ flexShrink: 0 }} />
+                    <GripVertical size={15} color="#DCD8CF" style={{ flexShrink: 0 }} />
                     <input value={opt} onChange={e => updateOption(i, e.target.value)}
                       style={{ ...inputStyle, padding: '7px 10px' }} placeholder={`Option ${i + 1}`} />
                     <button onClick={() => removeOption(i)} disabled={(draft.options?.length ?? 0) <= 1}
                       style={{
                         flexShrink: 0, background: 'none', border: 'none',
                         cursor: (draft.options?.length ?? 0) <= 1 ? 'not-allowed' : 'pointer',
-                        color: (draft.options?.length ?? 0) <= 1 ? '#e2e8f0' : '#ef4444', padding: 4,
+                        color: (draft.options?.length ?? 0) <= 1 ? '#E6E3DC' : '#A02D24', padding: 4,
                       }}>
                       <Trash2 size={15} />
                     </button>
@@ -201,8 +201,8 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
               </div>
               <button onClick={addOption} style={{
                 marginTop: 9, display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '7px 12px', borderRadius: 8, border: '1.5px dashed #cbd5e1',
-                background: '#fff', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                padding: '7px 12px', borderRadius: 8, border: '1.5px dashed #DCD8CF',
+                background: '#fff', color: '#BE4A46', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
               }}>
                 <Plus size={14} /> Add option
               </button>
@@ -210,20 +210,20 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
           )}
 
           {draft.type === 'yesno' && (
-            <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
-              <span style={{ fontSize: 12, color: '#64748b' }}>Fixed options: <strong>Yes</strong> / <strong>No</strong></span>
+            <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: '#FBFAF7', border: '1px solid #F1EFEA' }}>
+              <span style={{ fontSize: 12, color: '#6E6A62' }}>Fixed options: <strong>Yes</strong> / <strong>No</strong></span>
             </div>
           )}
 
           {draft.type === 'signature' && (
-            <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
-              <span style={{ fontSize: 12, color: '#64748b' }}>Captures a signature / sign-off (e.g. Informed Consent).</span>
+            <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: '#FBFAF7', border: '1px solid #F1EFEA' }}>
+              <span style={{ fontSize: 12, color: '#6E6A62' }}>Captures a signature / sign-off (e.g. Informed Consent).</span>
             </div>
           )}
 
           {draft.type === 'file' && (
-            <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
-              <span style={{ fontSize: 12, color: '#64748b' }}>Allows the site to attach a document or image.</span>
+            <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: '#FBFAF7', border: '1px solid #F1EFEA' }}>
+              <span style={{ fontSize: 12, color: '#6E6A62' }}>Allows the site to attach a document or image.</span>
             </div>
           )}
 
@@ -232,13 +232,13 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
               <label style={labelStyle}>Calculation formula</label>
               <input value={draft.expression ?? ''} onChange={e => set({ expression: e.target.value })}
                 placeholder="e.g. weight / (height/100)^2" style={inputStyle} />
-              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Value is derived automatically from this expression.</p>
+              <p style={{ fontSize: 11, color: '#8A857B', marginTop: 6 }}>Value is derived automatically from this expression.</p>
             </div>
           )}
 
           {/* Section grouping */}
           <div style={{ marginBottom: 20 }}>
-            <label style={labelStyle}>Section <span style={{ color: '#94a3b8', fontWeight: 500 }}>(optional)</span></label>
+            <label style={labelStyle}>Section <span style={{ color: '#8A857B', fontWeight: 500 }}>(optional)</span></label>
             <input value={draft.section ?? ''} onChange={e => set({ section: e.target.value })}
               placeholder="e.g. Anthropometry" style={inputStyle} />
           </div>
@@ -250,9 +250,9 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
               {[{ v: true, l: 'Required' }, { v: false, l: 'Optional' }].map(opt => (
                 <button key={String(opt.v)} onClick={() => set({ required: opt.v })} style={{
                   flex: 1, padding: '9px 0', borderRadius: 9, cursor: 'pointer',
-                  border: `1.5px solid ${draft.required === opt.v ? '#2563eb' : '#e2e8f0'}`,
-                  background: draft.required === opt.v ? '#eff6ff' : '#fff',
-                  color: draft.required === opt.v ? '#2563eb' : '#64748b',
+                  border: `1.5px solid ${draft.required === opt.v ? '#BE4A46' : '#E6E3DC'}`,
+                  background: draft.required === opt.v ? '#FDF1F1' : '#fff',
+                  color: draft.required === opt.v ? '#BE4A46' : '#6E6A62',
                   fontSize: 13, fontWeight: 600,
                 }}>{opt.l}</button>
               ))}
@@ -268,9 +268,9 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
                 return (
                   <button key={c.value} onClick={() => set({ confidence: c.value })} style={{
                     flex: 1, padding: '9px 6px', borderRadius: 9, cursor: 'pointer',
-                    border: `1.5px solid ${active ? c.color : '#e2e8f0'}`,
+                    border: `1.5px solid ${active ? c.color : '#E6E3DC'}`,
                     background: active ? c.color + '15' : '#fff',
-                    color: active ? c.color : '#64748b', fontSize: 12, fontWeight: 600,
+                    color: active ? c.color : '#6E6A62', fontSize: 12, fontWeight: 600,
                   }}>{c.label}</button>
                 );
               })}
@@ -287,25 +287,25 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
 
           {/* Alert */}
           <div style={{ marginBottom: 20 }}>
-            <label style={labelStyle}>Alert <span style={{ color: '#94a3b8', fontWeight: 500 }}>(optional)</span></label>
+            <label style={labelStyle}>Alert <span style={{ color: '#8A857B', fontWeight: 500 }}>(optional)</span></label>
             {!draft.alert ? (
               <button onClick={() => set({ alert: { level: 'warning', message: '' } })} style={addBlockBtn}>
                 <AlertTriangle size={14} /> Add alert
               </button>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: '11px 12px', border: '1.5px solid #e2e8f0', borderRadius: 9 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: '11px 12px', border: '1.5px solid #E6E3DC', borderRadius: 9 }}>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   {ALERT_LEVELS.map(lv => {
                     const active = draft.alert!.level === lv.value;
                     return (
                       <button key={lv.value} onClick={() => set({ alert: { ...draft.alert!, level: lv.value } })} style={{
                         flex: 1, padding: '7px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                        border: `1.5px solid ${active ? lv.color : '#e2e8f0'}`, background: active ? lv.color + '15' : '#fff',
-                        color: active ? lv.color : '#64748b',
+                        border: `1.5px solid ${active ? lv.color : '#E6E3DC'}`, background: active ? lv.color + '15' : '#fff',
+                        color: active ? lv.color : '#6E6A62',
                       }}>{lv.label}</button>
                     );
                   })}
-                  <button onClick={() => set({ alert: undefined })} title="Remove alert" style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 4 }}>
+                  <button onClick={() => set({ alert: undefined })} title="Remove alert" style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#A02D24', padding: 4 }}>
                     <Trash2 size={15} />
                   </button>
                 </div>
@@ -318,7 +318,7 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
 
           {/* Conditional logic */}
           <div style={{ marginBottom: 20 }}>
-            <label style={labelStyle}>Conditional logic <span style={{ color: '#94a3b8', fontWeight: 500 }}>(optional)</span></label>
+            <label style={labelStyle}>Conditional logic <span style={{ color: '#8A857B', fontWeight: 500 }}>(optional)</span></label>
             {!draft.condition ? (
               <>
                 <button
@@ -328,16 +328,16 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
                   <Split size={14} /> Add condition
                 </button>
                 {siblingFields.length === 0 && (
-                  <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Add another field to this form first to reference it.</p>
+                  <p style={{ fontSize: 11, color: '#8A857B', marginTop: 6 }}>Add another field to this form first to reference it.</p>
                 )}
               </>
             ) : (() => {
               const cond = draft.condition;
               const needsValue = CONDITION_OPS.find(o => o.value === cond.operator)?.needsValue ?? false;
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: '11px 12px', border: '1.5px solid #e2e8f0', borderRadius: 9 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: '11px 12px', border: '1.5px solid #E6E3DC', borderRadius: 9 }}>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>When</span>
+                    <span style={{ fontSize: 12, color: '#6E6A62', fontWeight: 600 }}>When</span>
                     <select value={cond.whenFieldId ?? ''} onChange={e => set({ condition: { ...cond, whenFieldId: e.target.value } })}
                       style={{ ...inputStyle, flex: 1, minWidth: 120, padding: '7px 9px' }}>
                       {siblingFields.map(f => <option key={f.id} value={f.id}>{f.label || '(untitled field)'}</option>)}
@@ -352,18 +352,18 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>then</span>
+                    <span style={{ fontSize: 12, color: '#6E6A62', fontWeight: 600 }}>then</span>
                     {([{ v: 'show', l: 'Show this field' }, { v: 'require', l: 'Make required' }] as const).map(a => {
                       const active = cond.action === a.v;
                       return (
                         <button key={a.v} onClick={() => set({ condition: { ...cond, action: a.v } })} style={{
                           flex: 1, padding: '7px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                          border: `1.5px solid ${active ? '#4f46e5' : '#e2e8f0'}`, background: active ? '#eef2ff' : '#fff',
-                          color: active ? '#4f46e5' : '#64748b',
+                          border: `1.5px solid ${active ? '#9C3733' : '#E6E3DC'}`, background: active ? '#FDF1F1' : '#fff',
+                          color: active ? '#9C3733' : '#6E6A62',
                         }}>{a.l}</button>
                       );
                     })}
-                    <button onClick={() => set({ condition: undefined })} title="Remove condition" style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 4 }}>
+                    <button onClick={() => set({ condition: undefined })} title="Remove condition" style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#A02D24', padding: 4 }}>
                       <Trash2 size={15} />
                     </button>
                   </div>
@@ -394,27 +394,27 @@ export default function FieldEditorDrawer({ field, isNew, siblingFields = [], on
 
         {/* Footer */}
         <div style={{
-          padding: '14px 22px', borderTop: '1px solid #e2e8f0',
+          padding: '14px 22px', borderTop: '1px solid #E6E3DC',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
           {!isNew && onDelete && (
             <button onClick={onDelete} style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '10px 14px', borderRadius: 9, border: '1px solid #fecaca',
-              background: '#fef2f2', color: '#dc2626', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              padding: '10px 14px', borderRadius: 9, border: '1px solid #F1CFCE',
+              background: '#FBEDEB', color: '#A02D24', fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}>
               <Trash2 size={15} /> Delete
             </button>
           )}
           <div style={{ flex: 1 }} />
           <button onClick={onClose} style={{
-            padding: '10px 16px', borderRadius: 9, border: '1px solid #e2e8f0',
-            background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            padding: '10px 16px', borderRadius: 9, border: '1px solid #E6E3DC',
+            background: '#fff', color: '#5C584F', fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}>Cancel</button>
           <button onClick={save} disabled={!canSave} style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '10px 18px', borderRadius: 9, border: 'none',
-            background: canSave ? '#2563eb' : '#cbd5e1', color: '#fff',
+            background: canSave ? '#BE4A46' : '#DCD8CF', color: '#fff',
             fontSize: 13, fontWeight: 700, cursor: canSave ? 'pointer' : 'not-allowed',
           }}>
             <Save size={15} /> {isNew ? 'Add Field' : 'Save Changes'}

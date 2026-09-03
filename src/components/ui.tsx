@@ -1,9 +1,9 @@
 import type { Confidence } from '../types/study';
 
 const CONFIDENCE_STYLES: Record<Confidence, { bg: string; fg: string; label: string }> = {
-  high: { bg: '#dcfce7', fg: '#15803d', label: 'High confidence' },
-  medium: { bg: '#fef9c3', fg: '#854d0e', label: 'Medium confidence' },
-  low: { bg: '#fee2e2', fg: '#b91c1c', label: 'Low — review' },
+  high: { bg: '#EAF2ED', fg: '#2F6B4F', label: 'High confidence' },
+  medium: { bg: '#F5EFD6', fg: '#6B4E28', label: 'Medium confidence' },
+  low: { bg: '#FBEDEB', fg: '#973C38', label: 'Low — review' },
 };
 
 export function ConfidenceBadge({ level, compact }: { level: Confidence; compact?: boolean }) {
@@ -35,7 +35,7 @@ export function TypeBadge({ type }: { type: string }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center',
       padding: '2px 9px', borderRadius: 6,
-      background: '#eff6ff', color: '#2563eb',
+      background: '#FDF1F1', color: '#BE4A46',
       fontSize: 11, fontWeight: 600, fontFamily: 'monospace',
     }}>
       {TYPE_LABELS[type] ?? type}
@@ -43,7 +43,7 @@ export function TypeBadge({ type }: { type: string }) {
   );
 }
 
-export function Pill({ children, color = '#475569', bg = '#f1f5f9' }: {
+export function Pill({ children, color = '#5C584F', bg = '#F1EFEA' }: {
   children: React.ReactNode; color?: string; bg?: string;
 }) {
   return (
