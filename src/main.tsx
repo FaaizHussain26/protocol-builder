@@ -3,11 +3,15 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
+import { AuthProvider } from './utils/auth'
+import { fetchMe } from './utils/api'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <AuthProvider fetchMe={fetchMe}>
+        <App />
+      </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
 )

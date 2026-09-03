@@ -1,8 +1,9 @@
 import {
   Layers, Sparkles, FolderOpen, SlidersHorizontal, ListChecks,
-  AlertTriangle, FileOutput, Lock, LayoutDashboard, PenLine, Trash2, FolderTree,
+  AlertTriangle, FileOutput, LogOut, LayoutDashboard, PenLine, Trash2, FolderTree,
 } from 'lucide-react';
 import type { StudyModel } from '../types/study';
+import type { AuthUser } from '../utils/authToken';
 
 export const SIDEBAR_WIDTH = 244;
 
@@ -19,11 +20,13 @@ interface SidebarProps {
   studyTab: StudyTab;
   onStudyTab: (tab: StudyTab) => void;
   apiConfigured: boolean;
+  /** The logged-in user — shown in the footer. */
+  user: AuthUser;
   onLock: () => void;
 }
 
 export default function Sidebar({
-  view, onNavigate, onNewBuild, study, studyOpen, studyTab, onStudyTab, apiConfigured, onLock,
+  view, onNavigate, onNewBuild, study, studyOpen, studyTab, onStudyTab, apiConfigured, user, onLock,
 }: SidebarProps) {
   const unresolved = study?.findings.filter((f) => !f.resolved).length ?? 0;
 
@@ -100,7 +103,11 @@ export default function Sidebar({
 
       {/* Footer */}
       <div style={{ marginTop: 'auto', borderTop: '1px solid #2B1D1B', paddingTop: 10 }}>
-        <NavItem icon={<Lock size={14} />} label="Lock workspace" active={false} onClick={onLock} />
+        <div style={{ padding: '0 10px 8px', overflow: 'hidden' }}>
+          <p style={{ fontSize: 12.5, fontWeight: 600, color: '#E7E4DE', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</p>
+          <p style={{ fontSize: 10.5, color: '#8C7875', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{user.role}</p>
+        </div>
+        <NavItem icon={<LogOut size={14} />} label="Log out" active={false} onClick={onLock} />
       </div>
     </aside>
   );

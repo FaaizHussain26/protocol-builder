@@ -5,7 +5,8 @@ import StudyBuilder, { type Tab as StudyTab } from './components/StudyBuilder';
 import StudyLibrary from './components/StudyLibrary';
 import Sidebar, { SIDEBAR_WIDTH, type AppView } from './components/Sidebar';
 import Dashboard from './components/Dashboard';
-import PassLock, { isUnlocked, lockApp } from './components/PassLock';
+import Login from './components/Login';
+import { useAuth } from './utils/auth';
 import { extractTextFromFiles } from './utils/extractText';
 import { buildStudyFromDocuments, reviewStudyForms } from './utils/api';
 import type { BuildTreeRow } from './utils/api';
@@ -40,7 +41,7 @@ const PATH_TO_VIEW: Record<string, AppView> = {
 };
 
 export default function App() {
-  const [locked, setLocked] = useState(() => !isUnlocked());
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   // View is derived from the URL; navigating sets the URL.
@@ -175,7 +176,8 @@ export default function App() {
     setView('builder');
   };
 
-  if (locked) return <PassLock onUnlock={() => setLocked(false)} />;
+  if (loading) return null; // brief flash while /api/auth/me resolves an existing token
+  if (!user) return <Login />;
 
   const studyOpen = step === 'build' && !!study;
 
@@ -190,7 +192,8 @@ export default function App() {
         studyTab={studyTab}
         onStudyTab={(t) => { setStudyTab(t); setView('builder'); }}
         apiConfigured={CONFIGURED}
-        onLock={() => { lockApp(); setLocked(true); }}
+        user={user}
+        onLock={logout}
       />
 
       <main style={{

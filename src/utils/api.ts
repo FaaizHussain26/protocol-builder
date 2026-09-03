@@ -9,6 +9,7 @@ import type {
   TemplatePreferences,
   TemplateQuestion,
 } from '../types/study';
+import { getToken, reportUnauthorized, type AuthUser } from './authToken';
 
 export interface BuildOptions {
   /** Free-text extra instructions appended to the build prompt. */
@@ -36,17 +37,25 @@ export const isConfigured = !!API_BASE;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // fetch wrapper: JSON in/out, error→Error(message), retry on 429/503 backoff.
+// Attaches the logged-in user's token to every call; a 401 clears the session
+// (via reportUnauthorized) so the app falls back to the login screen.
 async function req<T>(path: string, init?: RequestInit, retries = 3): Promise<T> {
   for (let attempt = 0; ; attempt++) {
+    const token = getToken();
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
     });
     if (!res.ok && (res.status === 429 || res.status === 503) && attempt < retries) {
       const ra = Number(res.headers.get('retry-after'));
       await sleep(Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(1000 * 2 ** attempt, 15000));
       continue;
     }
+    if (res.status === 401) reportUnauthorized();
     if (!res.ok) {
       let msg = `API error ${res.status}`;
       try {
@@ -59,6 +68,19 @@ async function req<T>(path: string, init?: RequestInit, retries = 3): Promise<T>
     }
     return (await res.json()) as T;
   }
+}
+
+// ---- Auth ----
+export interface RegisterArgs { name: string; email: string; password: string; inviteCode?: string }
+export async function registerUser(args: RegisterArgs): Promise<{ user: AuthUser; token: string }> {
+  return req('/api/auth/register', { method: 'POST', body: JSON.stringify(args) });
+}
+export async function loginUser(email: string, password: string): Promise<{ user: AuthUser; token: string }> {
+  return req('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+}
+export async function fetchMe(): Promise<AuthUser> {
+  const { user } = await req<{ user: AuthUser }>('/api/auth/me');
+  return user;
 }
 
 // ---- Build pipeline ----
