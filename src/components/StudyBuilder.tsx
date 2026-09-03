@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Layers, AlertTriangle, FileOutput, RotateCcw, Check, Pencil, FlaskConical,
-  ListChecks, Plus, FileText, CircleDot, Save, Trash2, GripVertical, SlidersHorizontal, FolderTree,
+  ListChecks, Plus, FileText, CircleDot, Save, Trash2, GripVertical, SlidersHorizontal, FolderTree, ClipboardList,
 } from 'lucide-react';
 import type {
   StudyModel, StudyField, StudyForm, StudyVisit, ReviewStatus,
@@ -17,6 +17,7 @@ import ExportPanel from './ExportPanel';
 import FieldEditorDrawer from './FieldEditorDrawer';
 import { visitCtlBtn, RAG, formReviewStatus, groupFieldsBySection } from './study/shared';
 import { FormBlock, VisitPicker, FoldersPanel, SettingsPanel } from './study/components';
+import DataEntry from './DataEntry';
 
 // Identifies which field (or new field) the editor drawer is targeting.
 interface EditTarget {
@@ -92,7 +93,7 @@ interface StudyBuilderProps {
   onTabChange?: (t: Tab) => void;
 }
 
-export type Tab = 'build' | 'folders' | 'eligibility' | 'intelligence' | 'export' | 'settings';
+export type Tab = 'build' | 'folders' | 'data' | 'eligibility' | 'intelligence' | 'export' | 'settings';
 
 export default function StudyBuilder({ study, setStudy, onReset, studyId, protocolText, onStudyIdChange, autoSaveEnabled, tab: controlledTab, onTabChange }: StudyBuilderProps) {
   const [internalTab, setInternalTab] = useState<Tab>('build');
@@ -532,6 +533,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
   const TABS: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'build', label: 'Study Build', icon: <Layers size={15} /> },
     { id: 'folders', label: 'Folders', icon: <FolderTree size={15} /> },
+    { id: 'data', label: 'Data Entry', icon: <ClipboardList size={15} /> },
     { id: 'eligibility', label: 'Eligibility', icon: <ListChecks size={15} />, badge: study.eligibility.length },
     { id: 'intelligence', label: 'Intelligence', icon: <AlertTriangle size={15} />, badge: study.findings.filter(f => !f.resolved).length },
     { id: 'settings', label: 'eSource Settings', icon: <SlidersHorizontal size={15} /> },
@@ -931,6 +933,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
             onReorderOptions={(formId, fieldId, options) => mutateField(formId, fieldId, { options })}
           />
         )}
+        {tab === 'data' && <DataEntry study={study} studyId={studyId} />}
         {tab === 'eligibility' && <EligibilityPanel eligibility={study.eligibility} />}
         {tab === 'intelligence' && (
           <FindingsPanel
