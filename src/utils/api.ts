@@ -8,6 +8,11 @@ import type {
   StudySummary,
   TemplatePreferences,
   TemplateQuestion,
+  Subject,
+  SubjectStatus,
+  VisitInstance,
+  VisitInstanceStatus,
+  FormSubmission,
 } from '../types/study';
 import { getToken, reportUnauthorized, type AuthUser } from './authToken';
 
@@ -242,4 +247,92 @@ export async function createQuestion(q: { text: string; answerType: string; opti
 
 export async function deleteQuestion(id: string): Promise<void> {
   await req<{ ok: boolean }>(`/api/questions/${id}`, { method: 'DELETE' });
+}
+
+// ---- Data capture (Phase 2): subjects, visit instances, form submissions ----
+
+export async function listSubjects(studyId: string): Promise<Subject[]> {
+  const { items } = await req<{ items: Subject[] }>(`/api/studies/${studyId}/subjects`);
+  return items;
+}
+
+export async function createSubject(studyId: string, subjectCode: string): Promise<Subject> {
+  const { subject } = await req<{ subject: Subject }>(`/api/studies/${studyId}/subjects`, {
+    method: 'POST',
+    body: JSON.stringify({ subjectCode }),
+  });
+  return subject;
+}
+
+export async function getSubject(id: string): Promise<Subject> {
+  const { subject } = await req<{ subject: Subject }>(`/api/subjects/${id}`);
+  return subject;
+}
+
+export async function updateSubject(id: string, status: SubjectStatus): Promise<Subject> {
+  const { subject } = await req<{ subject: Subject }>(`/api/subjects/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+  return subject;
+}
+
+export async function listVisitInstances(subjectId: string): Promise<VisitInstance[]> {
+  const { items } = await req<{ items: VisitInstance[] }>(`/api/subjects/${subjectId}/visits`);
+  return items;
+}
+
+export async function createVisitInstance(subjectId: string, visitId: string): Promise<VisitInstance> {
+  const { visit } = await req<{ visit: VisitInstance }>(`/api/subjects/${subjectId}/visits`, {
+    method: 'POST',
+    body: JSON.stringify({ visitId }),
+  });
+  return visit;
+}
+
+export async function updateVisitInstance(
+  visitInstanceId: string,
+  updates: Partial<{ status: VisitInstanceStatus; scheduledDate: string; completedDate: string }>,
+): Promise<VisitInstance> {
+  const { visit } = await req<{ visit: VisitInstance }>(`/api/visits/${visitInstanceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+  return visit;
+}
+
+// Fetches (or, on first access, creates) the submission for this visit+form.
+export async function getFormSubmission(visitInstanceId: string, formId: string): Promise<FormSubmission> {
+  const { submission } = await req<{ submission: FormSubmission }>(`/api/visits/${visitInstanceId}/forms/${formId}`);
+  return submission;
+}
+
+// Add a new row (repeatable forms only).
+export async function addRecord(submissionId: string): Promise<FormSubmission> {
+  const { submission } = await req<{ submission: FormSubmission }>(`/api/submissions/${submissionId}/records`, { method: 'POST' });
+  return submission;
+}
+
+export async function deleteRecord(submissionId: string, recordId: string): Promise<FormSubmission> {
+  const { submission } = await req<{ submission: FormSubmission }>(`/api/submissions/${submissionId}/records/${recordId}`, { method: 'DELETE' });
+  return submission;
+}
+
+// Autosave — merges the given field values into the record.
+export async function updateRecordValues(submissionId: string, recordId: string, values: Record<string, unknown>): Promise<FormSubmission> {
+  const { submission } = await req<{ submission: FormSubmission }>(`/api/submissions/${submissionId}/records/${recordId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ values }),
+  });
+  return submission;
+}
+
+export async function submitRecord(submissionId: string, recordId: string): Promise<FormSubmission> {
+  const { submission } = await req<{ submission: FormSubmission }>(`/api/submissions/${submissionId}/records/${recordId}/submit`, { method: 'POST' });
+  return submission;
+}
+
+export async function signRecord(submissionId: string, recordId: string): Promise<FormSubmission> {
+  const { submission } = await req<{ submission: FormSubmission }>(`/api/submissions/${submissionId}/records/${recordId}/sign`, { method: 'POST' });
+  return submission;
 }
