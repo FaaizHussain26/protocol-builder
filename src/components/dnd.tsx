@@ -3,17 +3,18 @@ import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core';
 import {
-  SortableContext, verticalListSortingStrategy, useSortable,
+  SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy, useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// A vertical drag-and-drop sortable list. `ids` is the ordered item id list;
-// `onReorder(fromIndex, toIndex)` fires on drop. Children render the rows
-// (each wrapped with <SortableRow id=…>).
-export function SortableList({ ids, onReorder, children }: {
+// A drag-and-drop sortable list (vertical by default; pass strategy="horizontal"
+// for a single-row chip list). `ids` is the ordered item id list; `onReorder`
+// fires on drop. Children render the rows (each wrapped with <SortableRow id=…>).
+export function SortableList({ ids, onReorder, children, strategy = 'vertical' }: {
   ids: string[];
   onReorder: (from: number, to: number) => void;
   children: ReactNode;
+  strategy?: 'vertical' | 'horizontal';
 }) {
   // 5px activation distance so clicks (accept/edit/etc.) still work.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -27,7 +28,7 @@ export function SortableList({ ids, onReorder, children }: {
   };
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+      <SortableContext items={ids} strategy={strategy === 'horizontal' ? horizontalListSortingStrategy : verticalListSortingStrategy}>
         {children}
       </SortableContext>
     </DndContext>

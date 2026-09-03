@@ -1,8 +1,8 @@
 // Presentational components extracted from StudyBuilder — the visit/form/field
 // tree, folders and settings panels, and their field-level building blocks.
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
-  AlertTriangle, Check, ChevronDown, ClipboardCheck, Copy, CopyPlus, Folder, FolderTree,
+  AlertTriangle, Check, ClipboardCheck, Copy, CopyPlus, Folder, FolderTree,
   GripVertical, PenLine, Pencil, Plus, RefreshCw, Rows3, SlidersHorizontal, Split, Trash2, Upload, X,
 } from 'lucide-react';
 import type { ReviewStatus, StudyField, StudyForm, StudyVisit } from '../../types/study';
@@ -573,106 +573,82 @@ export function VisitPicker({ visits, activeVisitId, onSelect, onReorder }: {
   onSelect: (id: string) => void;
   onReorder: (fromId: string, toId: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
   const active = visits.find(v => v.id === activeVisitId);
   const label = (v: StudyVisit) => `${v.name}${v.timing ? ` — ${v.timing}` : ''}${v.kind === 'log' ? ' (log)' : ''}`;
 
   // Group visits into arms (folders) in canonical arm order.
   const arms = orderedArms(visits);
   const [armTab, setArmTab] = useState(() => active?.arm ?? arms[0] ?? 'Study Visit');
-
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    window.addEventListener('mousedown', h);
-    return () => window.removeEventListener('mousedown', h);
-  }, [open]);
+  // If the active visit moves to a different arm from elsewhere (e.g. it's
+  // deleted and selection falls back to a visit in another arm), follow it.
+  // Adjusted during render (not an effect) — the standard React pattern for
+  // state that must react to a prop change without an extra render+flash.
+  const [lastActiveId, setLastActiveId] = useState(activeVisitId);
+  if (activeVisitId !== lastActiveId) {
+    setLastActiveId(activeVisitId);
+    const nextArm = active?.arm ?? arms[0] ?? 'Study Visit';
+    if (nextArm !== armTab) setArmTab(nextArm);
+  }
 
   const armVisits = visits.filter(v => (v.arm ?? 'Study Visit') === armTab);
   const ids = armVisits.map(v => v.id);
 
   return (
-    <div ref={ref} style={{ position: 'relative', minWidth: 280, maxWidth: '100%' }}>
-      <button onClick={() => setOpen(o => {
-        // Opening: land the tabs on the arm the active visit lives in.
-        if (!o) setArmTab(active?.arm ?? arms[0] ?? 'Study Visit');
-        return !o;
-      })} style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 9,
-        border: '1.5px solid #DCD8CF', background: '#fff', fontSize: 14, fontWeight: 600, color: '#17181A',
-        fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left',
-      }}>
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {active ? `${active.arm ?? 'Study Visit'} › ${label(active)}` : 'Select visit'}
-        </span>
-        <ChevronDown size={16} color="#6E6A62" style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} />
-      </button>
-      {open && (
-        <div style={{
-          position: 'absolute', zIndex: 50, top: 'calc(100% + 4px)', left: 0, width: 400, maxWidth: '90vw',
-          background: '#fff', border: '1px solid #E6E3DC',
-          borderRadius: 10, boxShadow: '0 14px 34px rgba(23,24,26,0.20)', overflow: 'hidden',
-        }}>
-          {/* Arm tabs */}
-          <div style={{
-            display: 'flex', gap: 2, padding: '8px 8px 0', overflowX: 'auto',
-            borderBottom: '1px solid #EFECE5',
-          }}>
-            {arms.map(arm => {
-              const armActive = arm === armTab;
-              const count = visits.filter(v => (v.arm ?? 'Study Visit') === arm).length;
-              return (
-                <button key={arm} onClick={() => setArmTab(arm)} style={{
-                  flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '7px 11px', border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer',
-                  background: armActive ? '#FDF1F1' : 'transparent',
-                  color: armActive ? '#BE4A46' : '#8A857B',
-                  fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3,
-                  borderBottom: `2px solid ${armActive ? '#BE4A46' : 'transparent'}`,
-                  whiteSpace: 'nowrap',
-                }}>
-                  {arm}
-                  <span style={{
-                    fontSize: 10.5, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
-                    background: armActive ? '#F1CFCE' : '#F1EFEA', color: armActive ? '#973C38' : '#A29C90',
-                  }}>{count}</span>
-                </button>
-              );
-            })}
-          </div>
+    <div style={{ width: '100%' }}>
+      {/* Arm tabs — always visible, not a dropdown */}
+      <div style={{ display: 'flex', gap: 2, overflowX: 'auto' }}>
+        {arms.map(arm => {
+          const armActive = arm === armTab;
+          const count = visits.filter(v => (v.arm ?? 'Study Visit') === arm).length;
+          return (
+            <button key={arm} onClick={() => setArmTab(arm)} style={{
+              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 12px', border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer',
+              background: armActive ? '#fff' : 'transparent',
+              color: armActive ? '#BE4A46' : '#8A857B',
+              fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3,
+              borderBottom: `2px solid ${armActive ? '#BE4A46' : 'transparent'}`,
+              whiteSpace: 'nowrap',
+            }}>
+              {arm}
+              <span style={{
+                fontSize: 10.5, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
+                background: armActive ? '#FDF1F1' : '#F1EFEA', color: armActive ? '#973C38' : '#A29C90',
+              }}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
 
-          {/* Selected arm's visits */}
-          <div style={{ maxHeight: 380, overflowY: 'auto', padding: 4 }}>
-            <SortableList ids={ids} onReorder={(from, to) => onReorder(ids[from], ids[to])}>
-              {armVisits.map(v => (
-                <SortableRow key={v.id} id={v.id}>
-                  {({ setNodeRef, style, handleProps }) => (
-                    <div ref={setNodeRef} style={{
-                      ...style, display: 'flex', alignItems: 'center', gap: 4, borderRadius: 8,
-                      background: v.id === activeVisitId ? '#FDF1F1' : 'transparent',
+      {/* Visit/folder schedule for the selected arm */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 2px 2px', overflowX: 'auto' }}>
+        <SortableList ids={ids} onReorder={(from, to) => onReorder(ids[from], ids[to])} strategy="horizontal">
+          {armVisits.map(v => (
+            <SortableRow key={v.id} id={v.id}>
+              {({ setNodeRef, style, handleProps }) => {
+                const isActive = v.id === activeVisitId;
+                return (
+                  <div ref={setNodeRef} style={{ ...style, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                    <button onClick={() => onSelect(v.id)} style={{
+                      display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9,
+                      border: `1.5px solid ${isActive ? '#BE4A46' : '#E6E3DC'}`,
+                      background: isActive ? '#FDF1F1' : '#fff', cursor: 'pointer', whiteSpace: 'nowrap',
                     }}>
-                      <span {...handleProps} title="Drag to reorder" style={{ display: 'inline-flex', color: '#DCD8CF', cursor: 'grab', padding: '0 2px 0 5px', touchAction: 'none' }}>
-                        <GripVertical size={14} />
+                      <span {...handleProps} title="Drag to reorder" style={{ display: 'inline-flex', color: isActive ? '#F1CFCE' : '#DCD8CF', cursor: 'grab', touchAction: 'none' }} onClick={(e) => e.stopPropagation()}>
+                        <GripVertical size={13} />
                       </span>
-                      <button onClick={() => { onSelect(v.id); setOpen(false); }} style={{
-                        flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
-                        padding: '8px 8px', fontSize: 13.5, color: '#17181A', display: 'flex', alignItems: 'center', gap: 8,
-                      }}>
-                        {v.id === activeVisitId ? <Check size={14} color="#BE4A46" style={{ flexShrink: 0 }} /> : <span style={{ width: 14, flexShrink: 0 }} />}
-                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(v)}</span>
-                      </button>
-                    </div>
-                  )}
-                </SortableRow>
-              ))}
-            </SortableList>
-            {armVisits.length === 0 && (
-              <p style={{ fontSize: 12.5, color: '#A29C90', padding: '16px 10px', textAlign: 'center' }}>No folders in this arm.</p>
-            )}
-          </div>
-        </div>
-      )}
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: isActive ? '#BE4A46' : '#17181A' }}>{label(v)}</span>
+                    </button>
+                  </div>
+                );
+              }}
+            </SortableRow>
+          ))}
+        </SortableList>
+        {armVisits.length === 0 && (
+          <p style={{ fontSize: 12.5, color: '#A29C90', padding: '4px 6px' }}>No folders in this arm.</p>
+        )}
+      </div>
     </div>
   );
 }

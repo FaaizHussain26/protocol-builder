@@ -686,66 +686,73 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
       }}>
         {tab === 'build' && (
           <div>
-            {/* Visit selector — visits live in a dropdown, not the side menu */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-              padding: '16px 28px', borderBottom: '1px solid #E6E3DC', background: '#FBFAF7',
-            }}>
-              <label htmlFor="visit-select" style={{ fontSize: 11, fontWeight: 700, color: '#8A857B', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                Visit
-              </label>
-              <VisitPicker
-                visits={study.visits}
-                activeVisitId={activeVisit?.id ?? ''}
-                onSelect={id => { setActiveVisitId(id); setActiveFormId(''); }}
-                onReorder={reorderVisitsById}
-              />
-              {activeVisit && (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Pill>{activeVisit.kind === 'log' ? 'Continuous log' : 'Scheduled visit'}</Pill>
-                  {activeVisit.window && <Pill bg="#FDF1F1" color="#BE4A46">Window {activeVisit.window}</Pill>}
-                  <span style={{ fontSize: 12, color: '#8A857B' }}>
-                    {activeVisit.forms.length} form{activeVisit.forms.length !== 1 ? 's' : ''} · {activeVisit.forms.reduce((a, f) => a + f.fields.length, 0)} fields
-                  </span>
+            {/* Visit selector — arm tabs + that arm's schedule, always visible (no dropdown) */}
+            <div style={{ padding: '14px 28px 0', borderBottom: '1px solid #E6E3DC', background: '#FBFAF7' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#8A857B', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                  Visit
+                </label>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {activeVisit && (
+                    <>
+                      <button className="lift" title="Rename visit" onClick={() => {
+                        const n = window.prompt('Rename visit', activeVisit.name);
+                        if (n && n.trim()) renameVisit(activeVisit.id, n.trim());
+                      }} style={visitCtlBtn}><Pencil size={13} /></button>
+                      <button className="lift" title="Delete visit" onClick={() => {
+                        if (window.confirm(`Delete visit "${activeVisit.name}" and its forms?`)) removeVisit(activeVisit.id);
+                      }} style={visitCtlBtn}><Trash2 size={13} /></button>
+                    </>
+                  )}
+                  <button className="lift" onClick={addVisit} style={{ ...visitCtlBtn, color: '#BE4A46', borderColor: '#F1CFCE', width: 'auto', padding: '0 11px', gap: 6, fontWeight: 600, fontSize: 12.5 }}>
+                    <Plus size={14} /> Visit
+                  </button>
                 </div>
-              )}
-              {/* RAG review filter — narrows the forms list and visible fields */}
-              <div style={{ display: 'flex', gap: 3, alignItems: 'center', background: '#fff', border: '1px solid #E6E3DC', borderRadius: 9, padding: 3 }}>
-                {([
-                  { key: 'all', label: 'All', count: stats.total, color: '#5C584F' },
-                  { key: 'accepted', label: 'Approved', count: stats.accepted, color: RAG.accepted },
-                  { key: 'pending', label: 'Pending', count: stats.pending, color: RAG.pending },
-                  { key: 'rejected', label: 'Rejected', count: stats.rejected, color: RAG.rejected },
-                ] as const).map(f => {
-                  const active = reviewFilter === f.key;
-                  return (
-                    <button key={f.key} onClick={() => setReviewFilter(f.key)} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 9px',
-                      borderRadius: 7, border: 'none', cursor: 'pointer',
-                      background: active ? `${f.color}1a` : 'transparent',
-                      color: active ? f.color : '#8A857B', fontSize: 11.5, fontWeight: 700,
-                    }}>
-                      {f.key !== 'all' && <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.color }} />}
-                      {f.label} {f.count}
-                    </button>
-                  );
-                })}
               </div>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+
+              {/* Arm tabs + this arm's visit schedule */}
+              <div style={{ marginTop: 8 }}>
+                <VisitPicker
+                  visits={study.visits}
+                  activeVisitId={activeVisit?.id ?? ''}
+                  onSelect={id => { setActiveVisitId(id); setActiveFormId(''); }}
+                  onReorder={reorderVisitsById}
+                />
+              </div>
+
+              {/* Below the schedule: the active visit's status + the review (approved/pending/rejected) filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '10px 0 12px' }}>
                 {activeVisit && (
-                  <>
-                    <button className="lift" title="Rename visit" onClick={() => {
-                      const n = window.prompt('Rename visit', activeVisit.name);
-                      if (n && n.trim()) renameVisit(activeVisit.id, n.trim());
-                    }} style={visitCtlBtn}><Pencil size={13} /></button>
-                    <button className="lift" title="Delete visit" onClick={() => {
-                      if (window.confirm(`Delete visit "${activeVisit.name}" and its forms?`)) removeVisit(activeVisit.id);
-                    }} style={visitCtlBtn}><Trash2 size={13} /></button>
-                  </>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Pill>{activeVisit.kind === 'log' ? 'Continuous log' : 'Scheduled visit'}</Pill>
+                    {activeVisit.window && <Pill bg="#FDF1F1" color="#BE4A46">Window {activeVisit.window}</Pill>}
+                    <span style={{ fontSize: 12, color: '#8A857B' }}>
+                      {activeVisit.forms.length} form{activeVisit.forms.length !== 1 ? 's' : ''} · {activeVisit.forms.reduce((a, f) => a + f.fields.length, 0)} fields
+                    </span>
+                  </div>
                 )}
-                <button className="lift" onClick={addVisit} style={{ ...visitCtlBtn, color: '#BE4A46', borderColor: '#F1CFCE', width: 'auto', padding: '0 11px', gap: 6, fontWeight: 600, fontSize: 12.5 }}>
-                  <Plus size={14} /> Visit
-                </button>
+                {/* RAG review filter — narrows the forms list and visible fields */}
+                <div style={{ display: 'flex', gap: 3, alignItems: 'center', background: '#fff', border: '1px solid #E6E3DC', borderRadius: 9, padding: 3 }}>
+                  {([
+                    { key: 'all', label: 'All', count: stats.total, color: '#5C584F' },
+                    { key: 'accepted', label: 'Approved', count: stats.accepted, color: RAG.accepted },
+                    { key: 'pending', label: 'Pending', count: stats.pending, color: RAG.pending },
+                    { key: 'rejected', label: 'Rejected', count: stats.rejected, color: RAG.rejected },
+                  ] as const).map(f => {
+                    const active = reviewFilter === f.key;
+                    return (
+                      <button key={f.key} onClick={() => setReviewFilter(f.key)} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 9px',
+                        borderRadius: 7, border: 'none', cursor: 'pointer',
+                        background: active ? `${f.color}1a` : 'transparent',
+                        color: active ? f.color : '#8A857B', fontSize: 11.5, fontWeight: 700,
+                      }}>
+                        {f.key !== 'all' && <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.color }} />}
+                        {f.label} {f.count}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
