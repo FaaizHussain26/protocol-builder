@@ -618,7 +618,7 @@ export default function StudyBuilder({ study, setStudy, onReset, studyId, protoc
               background: 'transparent', color: '#CBBAB8',
               cursor: 'pointer', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap',
             }}>
-              <RotateCcw size={13} /> New Build
+              <RotateCcw size={13} /> New eSource
             </button>
           </div>
         </div>

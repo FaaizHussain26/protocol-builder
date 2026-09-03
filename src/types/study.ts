@@ -353,9 +353,14 @@ export interface StudySummary {
   createdAt?: string;
   updatedAt: string;
   visitCount: number;
+  formCount?: number;
   fieldCount: number;
   /** Denormalized count of accepted fields — drives draft review progress. */
   approvedFieldCount?: number;
+  /** Pending fields with low AI confidence — surfaced as "flagged". */
+  flaggedFieldCount?: number;
+  /** Unresolved blocker-severity intelligence findings. */
+  openBlockerCount?: number;
   /** Set when the study is in Trash (soft-deleted). */
   deletedAt?: string;
 }

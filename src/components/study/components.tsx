@@ -681,7 +681,7 @@ export function FoldersPanel({ visits, onAddArm, onAddFolder, onRenameArm, onRen
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <FolderTree size={18} color="#BE4A46" />
         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#17100F' }}>Folders</h2>
-        <span style={{ fontSize: 12, color: '#8A857B', flex: 1 }}>Drag a folder onto another arm to move it. Arms are main folders.</span>
+        <span style={{ fontSize: 12, color: '#8A857B', flex: 1 }}>Drag a folder to another arm to move it.</span>
         <button className="lift" onClick={onAddArm} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, border: '1px solid #F1CFCE', background: '#FDF1F1', color: '#BE4A46', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
           <Plus size={14} /> New arm
         </button>
@@ -742,9 +742,8 @@ export function SettingsPanel({ visits, activeVisitId, activeFormId, onReorderOp
         <SlidersHorizontal size={18} color="#BE4A46" style={{ flexShrink: 0, marginTop: 1 }} />
         <div>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: '#17100F' }}>eSource Settings</h2>
-          <p style={{ fontSize: 12.5, color: '#6E6A62', marginTop: 3, lineHeight: 1.5 }}>
-            Drag to reorder the answer options of each dropdown field. Showing dropdowns for{' '}
-            <b style={{ color: '#5C584F' }}>{form?.name ?? '—'}</b>{visit ? ` · ${visit.name}` : ''} — change the form in <b style={{ color: '#5C584F' }}>Study Build</b>.
+          <p style={{ fontSize: 12.5, color: '#6E6A62', marginTop: 3 }}>
+            Dropdown options for <b style={{ color: '#5C584F' }}>{form?.name ?? '—'}</b>{visit ? ` · ${visit.name}` : ''}.
           </p>
         </div>
       </div>

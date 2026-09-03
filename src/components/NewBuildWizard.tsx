@@ -226,23 +226,22 @@ export default function NewBuildWizard({
 
       {step === 2 && (
         <div style={{ marginTop: 28 }}>
-          <p style={{ fontSize: 13, color: '#6E6A62', lineHeight: 1.5, maxWidth: 620 }}>
-            The <strong style={{ color: '#17181A' }}>Protocol</strong> drives the visit schedule (its Schedule of Activities table + footnotes).
-            The <strong style={{ color: '#17181A' }}>eCRF / Completion Guide</strong> supplies the exact forms and fields.
+          <p style={{ fontSize: 13, color: '#8A857B' }}>
+            Protocol drives the visit schedule. eCRF supplies the forms and fields.
           </p>
 
           <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start', marginTop: 18 }}>
             <DocumentUploadBox
               label="Protocol"
               required
-              hint="Clinical study protocol containing the Schedule of Activities."
+              hint="Drives the visit schedule."
               files={protocolFiles}
               onFilesChange={onProtocolFilesChange}
               accent="#BE4A46"
             />
             <DocumentUploadBox
               label="eCRF / Completion Guide"
-              hint="eCRF or CRF completion requirements (recommended for full field detail)."
+              hint="Supplies the exact forms and fields."
               files={ecrfFiles}
               onFilesChange={onEcrfFilesChange}
               accent="#17181A"

@@ -36,9 +36,8 @@ export default function ExportPanel({ study, stats }: { study: StudyModel; stats
         </div>
       </div>
 
-      <p style={{ fontSize: 13.5, color: '#6E6A62', marginBottom: 18, lineHeight: 1.5 }}>
-        Export the reviewed build as deliverable artifacts. These are export files (a document and a
-        structured data file), framed as ready to drive setup in a CTMS — not a live connection.
+      <p style={{ fontSize: 13, color: '#8A857B', marginBottom: 18 }}>
+        Export the reviewed build as deliverable files.
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>

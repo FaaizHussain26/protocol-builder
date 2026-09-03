@@ -53,7 +53,7 @@ export default function Sidebar({
       <SectionLabel>Workspace</SectionLabel>
       <NavItem icon={<LayoutDashboard size={15} />} label="Dashboard"
         active={view === 'dashboard'} onClick={() => onNavigate('dashboard')} />
-      <NavItem icon={<Sparkles size={15} />} label="New Build"
+      <NavItem icon={<Sparkles size={15} />} label="New eSource"
         active={view === 'builder' && !studyOpen} onClick={onNewBuild} />
       <NavItem icon={<PenLine size={15} />} label="Drafts"
         active={view === 'drafts'} onClick={() => onNavigate('drafts')} disabled={!apiConfigured} />

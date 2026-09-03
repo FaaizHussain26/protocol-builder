@@ -12,9 +12,8 @@ export default function EligibilityPanel({ eligibility }: { eligibility: Eligibi
 
   return (
     <div style={{ padding: '24px 28px' }}>
-      <p style={{ fontSize: 13.5, color: '#6E6A62', marginBottom: 20, lineHeight: 1.5 }}>
-        Inclusion and exclusion criteria converted into pass/fail checklist logic. Each item shows the
-        original criterion, the suggested logic, and the AI's confidence.
+      <p style={{ fontSize: 13, color: '#8A857B', marginBottom: 20 }}>
+        Inclusion/exclusion criteria as pass/fail checks.
       </p>
 
       <CriteriaGroup

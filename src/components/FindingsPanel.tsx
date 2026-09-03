@@ -49,9 +49,8 @@ export default function FindingsPanel({ findings, onResolve }: {
         </span>
       </div>
 
-      <p style={{ fontSize: 13.5, color: '#6E6A62', marginBottom: 16, lineHeight: 1.5 }}>
-        Protocol-aware findings surfaced across the source documents. Each shows what it is, where it came
-        from, a confidence level, and a suggested action.
+      <p style={{ fontSize: 13, color: '#8A857B', marginBottom: 16 }}>
+        Cross-document issues surfaced by the AI.
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
